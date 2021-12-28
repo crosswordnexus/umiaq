@@ -48,7 +48,7 @@ def allPartitions(s, num=None):
         for cutpoints in itertools.combinations(cuts,k):
             yield multiSlice(s,cutpoints)
             
-def input_to_regex(i):
+def input_to_regex(i, combine_letters=False):
     """
     Create a regular expression pattern from an input string
     This regex will just tell us if a word is a candidate for the pattern
@@ -63,17 +63,32 @@ def input_to_regex(i):
     # The first occurrence is replaced with a `(.+)`
     # subsequent ones have to be replaced with appropriate backrefs
     capital_letters = re.findall(r'[A-Z]', i)
+    # if we're combining letters we only do this
+    # for letters that appear multiple times
+    if combine_letters:
+        capital_counter = Counter(capital_letters)
+        capital_letters = [k for k,v in capital_counter.items() if v > 1]
     ctr = 1
-    used_letters = set()
+    used_letters = dict()
     for c in capital_letters:
         # first replace one
         i = i.replace(c, '(.+)', 1)
         # then replace the rest
         i = i.replace(c, f'\\{ctr}')
-        used_letters.add(c)
+        used_letters[c] = ctr
+        ctr += 1
+    # if we're combining letters, take the rest in groups
+    other_letters = re.findall(r'[A-Z]+', i)
+    for c in other_letters:
+        i = i.replace(c, '(.+)')
+        used_letters[c] = ctr
         ctr += 1
     i = '^' + i + '$'
-    return i
+    if not combine_letters:
+        return i
+    else:
+        return i, used_letters
+
 
 def split_input(i):
     """
@@ -137,13 +152,31 @@ class Word:
     
     def all_partitions(self):
         # return all the partitions of the word that match the pattern
-        # For now: assume it's all uppercase letters, no repeats
-        pass
+        # get our regex, allowing for multiple letters at a time
+        i, letter_map = input_to_regex(self.pattern, True)
+        # keep just the letters, in order
+        letter_array = sorted(letter_map.keys(), key=letter_map.get)
+        # find our matches
+        matches = re.findall(i, self.word, re.IGNORECASE)[0]
+        if type(matches) == str:
+            matches = [matches]
+        # partition if necessary
+        mylist = [allPartitions(m, len(letter_array[k])) for k, m in enumerate(matches)]
+        partitions = []
+        for p in itertools.product(*mylist):
+            thesePartitions = dict()
+            for j, p1 in enumerate(p):
+                for k, char in enumerate(letter_array[j]):
+                    thesePartitions[char] = p1[k]
+            partitions.append(thesePartitions)
+        return partitions
         
 
 # For testing purposes
 class MyArgs:
-    input = 'AB;BC;CD'
+    def __init__(self):
+        self.input = 'AB;BC;CD'
+        #self.input = '*.AredABCA.*'
     
 def main():
     parser = argparse.ArgumentParser()
@@ -188,6 +221,7 @@ def main():
     # Now loop through all the necessary lists
     # and see if the "others" match something
     for word_tuple in itertools.product(*words):
-        pass
+        print(word_tuple)
+        break
             
         
