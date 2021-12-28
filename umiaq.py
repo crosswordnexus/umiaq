@@ -177,16 +177,10 @@ class MyArgs:
     def __init__(self):
         self.input = 'AB;BC;CD'
         #self.input = '*.AredABCA.*'
-    
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('input')
-    args = parser.parse_args()
-    
-    args = MyArgs()
-    
+        
+def solve_equation(_input):
     # Split the input
-    inputs = split_input(args.input)
+    inputs = split_input(_input)
     # Get the variables we iterate over, and those we don't
     cover, others = get_set_cover(inputs)
     
@@ -228,5 +222,15 @@ def main():
             print(p1)
             break
         break
+    
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input')
+    args = parser.parse_args()
+    
+    args = MyArgs()
+    
+    solve_equation(args.input)
+    
             
         
