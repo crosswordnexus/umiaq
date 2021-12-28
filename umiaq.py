@@ -13,6 +13,7 @@ import logging
 import json
 from collections import Counter
 import time
+import sys
 
 # Global variables
 
@@ -287,7 +288,6 @@ def solve_equation(_input):
                 entries = [this_dict[_] for _ in inputs]
                 for entries1 in itertools.product(*entries):
                     ret.add(tuple(entries1))
-                    print(entries1)
                     if len(ret) >= NUM_RESULTS:
                         return ret
         #END for p1
@@ -311,7 +311,7 @@ def main():
         args = parser.parse_args()
         args.input
     except:
-        args = MyArgs('AB;BC;CD')
+        args = MyArgs('AB;BA')
     
     # Set up a timer
     t1 = time.time()
@@ -326,7 +326,11 @@ def main():
         print("Maximum number of outputs reached")
     t2 = time.time()
     print(f"Total time: {t2-t1:.3f} seconds")
+    return 0
 
-    
+
+#%%
+if __name__ ==  '__main__':
+    sys.exit(main())
             
         
