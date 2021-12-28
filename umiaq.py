@@ -12,6 +12,7 @@ import argparse
 import logging
 import json
 from collections import Counter
+import time
 
 # Global variables
 
@@ -48,6 +49,23 @@ def allPartitions(s, num=None):
         for cutpoints in itertools.combinations(cuts,k):
             yield multiSlice(s,cutpoints)
             
+# Function to combine dictionaries, with conflict resolution
+def combine_dicts(*dlist):
+    """
+    Combine a tuple of dictionaries into one.
+    If there is a conflict in keys, return an empty dictionary
+    
+    Returns: dict
+    """
+    ret = dict()
+    for d in dlist:
+        for k, v in d.items():
+            if ret.get(k, d[k]) != d[k]:
+                return dict()
+            else:
+                ret[k] = d[k]
+    return ret
+            
 def input_to_regex(i, combine_letters=False):
     """
     Create a regular expression pattern from an input string
@@ -78,11 +96,13 @@ def input_to_regex(i, combine_letters=False):
         used_letters[c] = ctr
         ctr += 1
     # if we're combining letters, take the rest in groups
-    other_letters = re.findall(r'[A-Z]+', i)
-    for c in other_letters:
-        i = i.replace(c, '(.+)')
-        used_letters[c] = ctr
-        ctr += 1
+    if combine_letters:
+        other_letters = re.findall(r'[A-Z]+', i)
+        for c in other_letters:
+            dots = '.' * len(c)
+            i = i.replace(c, f'({dots}+)')
+            used_letters[c] = ctr
+            ctr += 1
     i = '^' + i + '$'
     if not combine_letters:
         return i
@@ -147,7 +167,7 @@ class Word:
         
     def matches_pattern(self):
         # check that the word matches the pattern
-        r = input_to_regex(self.pattern)
+        r, _ = input_to_regex(self.pattern, True)
         return re.match(r, self.word) is not None
     
     def all_partitions(self):
@@ -170,13 +190,16 @@ class Word:
                     thesePartitions[char] = p1[k]
             partitions.append(thesePartitions)
         return partitions
-        
+
 
 # For testing purposes
 class MyArgs:
-    def __init__(self):
-        self.input = 'AB;BC;CD'
-        #self.input = '*.AredABCA.*'
+    
+    def __repr__(self):
+        return self.input
+    
+    def __init__(self, _input):
+        self.input = _input
         
 def solve_equation(_input):
     # Split the input
@@ -184,53 +207,126 @@ def solve_equation(_input):
     # Get the variables we iterate over, and those we don't
     cover, others = get_set_cover(inputs)
     
-    # The number of inputs is the number of patterns in the cover
-    num_inputs = len(cover)
-    
     # Set up lists of candidate words
     # and our regular expressions
     words = []
     regexes = dict()
-    for i in cover:
-        words.append([])
-        pattern = input_to_regex(i)
-        regexes[i] = re.compile(pattern, re.IGNORECASE)
+    for patt in inputs:
+        if patt in cover:
+            words.append([])
+        pattern, _ = input_to_regex(patt, True)
+        regexes[patt] = re.compile(pattern, re.IGNORECASE)
     
     # Go through the word list and get words that match the "cover" pattern(s)
     # we also store all the words for "others" matching
-    # TODO: optimize "others" in the same way
-    all_words = set()
+    other_dict = dict()
+    for patt in others:
+        other_dict[patt] = dict()
     with open(WORD_LIST, 'r') as fid:
         for line in fid:
             word, score = line.split(';')
             score = int(score)
             if score < MIN_SCORE:
                 continue
+            # do the cover words
             for i, patt in enumerate(cover):
                 if regexes[patt].match(word) is not None:
                     w = Word(word, score, patt)
                     words[i].append(w)
-            all_words.add(word)
+            # do the "other" words
+            for i, patt in enumerate(others):
+                # We keep a dictionary for easy lookup
+                if regexes[patt].match(word) is not None:
+                    w = Word(word, score, patt)
+                    all_partitions = w.all_partitions()
+                    for p in all_partitions:
+                        this_key = []
+                        for char in re.findall(r'[A-Z]', patt):
+                            this_key.append(p[char])
+                        this_key = tuple(this_key)
+                        # add to the appropriate dictionary
+                        try:
+                            other_dict[patt][this_key].add(w)
+                        except:
+                            other_dict[patt][this_key] = set([w])
+                            
+    # If there's only one input, there's no need to loop through everything again
+    if len(inputs) == 1:
+        s = set()
+        for w in words[0]:
+            s.add((w,))
+        return s
             
     # Now loop through all the necessary lists
     # and see if the "others" match something
+    ret = set()
     for word_tuple in itertools.product(*words):
-        #print(word_tuple)
+        this_dict_orig = dict([(w.pattern, set([w])) for w in word_tuple])
         partitions = [w.all_partitions() for w in word_tuple]
-        #print(partitions)
         for p1 in itertools.product(*partitions):
-            print(p1)
-            break
-        break
+            this_dict = this_dict_orig.copy()
+            #print(p1)
+            # Combine these dictionaries, ensuring there are no conflicts
+            combined_dict = combine_dicts(*p1)
+            # If there's a conflict we move on to the next
+            if not combined_dict:
+                this_dict = dict()
+                break
+            for other in others:
+                other_vars = re.findall(r'[A-Z]', other)
+                # We need to create the key for lookup
+                this_tuple = tuple([combined_dict[_] for _ in other_vars])
+                try:
+                    this_dict[other] = other_dict[other][this_tuple]
+                except:
+                    this_dict = dict()
+                    break
+            #END for other
+            # If we've got a match, add it to the return set
+            if this_dict:
+                entries = [this_dict[_] for _ in inputs]
+                for entries1 in itertools.product(*entries):
+                    ret.add(tuple(entries1))
+                    print(entries1)
+                    if len(ret) >= NUM_RESULTS:
+                        return ret
+        #END for p1
+    #END for word_tuple
+    return ret
+
+def score_tuple(word_tuple):
+    """
+    Score a tuple of words.
+    For now this is just the sum of the individual scores
+    """
+    return sum(w.score for w in word_tuple)
     
 def main():
+    # Parse the inputs
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
-    args = parser.parse_args()
     
-    args = MyArgs()
+    # If we can't parse the inputs, assume we're testing
+    try:
+        args = parser.parse_args()
+        args.input
+    except:
+        args = MyArgs('AB;BC;CD')
     
-    solve_equation(args.input)
+    # Set up a timer
+    t1 = time.time()
+    # Solve the inputs
+    ret = solve_equation(args.input)
+    # Sort on score
+    ret_list = sorted(ret, key=score_tuple, reverse=True)
+    # Print the output
+    for word_tuple in ret_list:
+        print(" • ".join([w.word for w in word_tuple]))
+    if len(ret) >= NUM_RESULTS:
+        print("Maximum number of outputs reached")
+    t2 = time.time()
+    print(f"Total time: {t2-t1:.3f} seconds")
+
     
             
         
