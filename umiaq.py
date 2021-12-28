@@ -21,7 +21,7 @@ NUM_RESULTS = 1000
 # The minimum score in the word list
 MIN_SCORE = 80
 # The word list itself
-WORD_LIST = 'xwordlist.dict'
+WORD_LIST = 'xwordlist_sorted_trimmed.txt'
 
 # Make partitions of a string
 # We will need to change this when it gets more advanced
