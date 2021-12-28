@@ -127,3 +127,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+.pylint.d/umiaq1.stats
