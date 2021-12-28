@@ -18,7 +18,7 @@ from collections import Counter
 # The number of results to report
 NUM_RESULTS = 1000
 # The minimum score in the word list
-MIN_SCORE = 50
+MIN_SCORE = 80
 # The word list itself
 WORD_LIST = 'xwordlist.dict'
 
@@ -134,7 +134,7 @@ class Word:
         self.word = word
         self.pattern = pattern
         self.score = score
-        self.partitions = self.all_partitions()
+        #self.partitions = self.all_partitions()
         
     # Prints object information
     def __repr__(self):
@@ -195,10 +195,10 @@ def main():
     
     # Set up lists of candidate words
     # and our regular expressions
-    words = dict()
+    words = []
     regexes = dict()
     for i in cover:
-        words[i] = []
+        words.append([])
         pattern = input_to_regex(i)
         regexes[i] = re.compile(pattern, re.IGNORECASE)
     
@@ -212,16 +212,21 @@ def main():
             score = int(score)
             if score < MIN_SCORE:
                 continue
-            for i in cover:
-                if regexes[i].match(word) is not None:
-                    w = Word(word, score, i)
+            for i, patt in enumerate(cover):
+                if regexes[patt].match(word) is not None:
+                    w = Word(word, score, patt)
                     words[i].append(w)
             all_words.add(word)
             
     # Now loop through all the necessary lists
     # and see if the "others" match something
     for word_tuple in itertools.product(*words):
-        print(word_tuple)
+        #print(word_tuple)
+        partitions = [w.all_partitions() for w in word_tuple]
+        #print(partitions)
+        for p1 in itertools.product(*partitions):
+            print(p1)
+            break
         break
             
         
