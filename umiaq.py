@@ -18,15 +18,17 @@ import sys
 # Global variables
 
 # The number of results to report
-NUM_RESULTS = 1000
+NUM_RESULTS = 100
 # The minimum score in the word list
 MIN_SCORE = 80
+# The maximum word length we are interested in
+MAX_WORD_LENGTH = 21
 # The word list itself
 WORD_LIST = 'xwordlist_sorted_trimmed.txt'
 
 # Make partitions of a string
 # We will need to change this when it gets more advanced
-def multiSlice(s,cutpoints):
+def multiSlice(s, cutpoints):
     """
     Helper function for allPartitions
     """
@@ -201,8 +203,10 @@ class MyArgs:
     
     def __init__(self, _input):
         self.input = _input
+        self.debug = False
+        self.num_results = NUM_RESULTS
         
-def solve_equation(_input):
+def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH):
     # Split the input
     inputs = split_input(_input)
     # Get the variables we iterate over, and those we don't
@@ -220,6 +224,7 @@ def solve_equation(_input):
     
     # Go through the word list and get words that match the "cover" pattern(s)
     # we also store all the words for "others" matching
+    t1 = time.time()
     other_dict = dict()
     for patt in others:
         other_dict[patt] = dict()
@@ -227,7 +232,7 @@ def solve_equation(_input):
         for line in fid:
             word, score = line.split(';')
             score = int(score)
-            if score < MIN_SCORE:
+            if score < MIN_SCORE or len(word) > max_word_length:
                 continue
             # do the cover words
             for i, patt in enumerate(cover):
@@ -250,16 +255,20 @@ def solve_equation(_input):
                             other_dict[patt][this_key].add(w)
                         except:
                             other_dict[patt][this_key] = set([w])
+    t2 = time.time()
+    logging.debug(f'Initial pass through word list: {(t2-t1):.3f} seconds')
                             
     # If there's only one input, there's no need to loop through everything again
     if len(inputs) == 1:
         s = set()
         for w in words[0]:
             s.add((w,))
-        return s
+        ret = list(s)[:num_results]
+        return ret
             
     # Now loop through all the necessary lists
     # and see if the "others" match something
+    t3 = time.time()
     ret = set()
     for word_tuple in itertools.product(*words):
         this_dict_orig = dict([(w.pattern, set([w])) for w in word_tuple])
@@ -288,10 +297,14 @@ def solve_equation(_input):
                 entries = [this_dict[_] for _ in inputs]
                 for entries1 in itertools.product(*entries):
                     ret.add(tuple(entries1))
-                    if len(ret) >= NUM_RESULTS:
+                    if len(ret) >= num_results:
+                        t4 = time.time()
+                        logging.debug(f'Final pass: {(t4-t3):.3f} seconds')
                         return ret
         #END for p1
     #END for word_tuple
+    t4 = time.time()
+    logging.debug(f'Final pass: {(t4-t3):.3f} seconds')
     return ret
 
 def score_tuple(word_tuple):
@@ -305,6 +318,13 @@ def main():
     # Parse the inputs
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
+    parser.add_argument("-d", "--debug"
+                        , help="Turn on debugging"
+                        , action="store_true")
+    parser.add_argument("-n", "--num_results"
+                        , type=int
+                        , help="The maximum number of results to output"
+                        , default=NUM_RESULTS)
     
     # If we can't parse the inputs, assume we're testing
     try:
@@ -313,10 +333,17 @@ def main():
     except:
         args = MyArgs('AB;BA')
     
+    # Set up logging
+    loglevel = 'INFO'
+    if args.debug:
+        loglevel = 'DEBUG'
+    logging.basicConfig(format='%(levelname)s [%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
+
+    
     # Set up a timer
     t1 = time.time()
     # Solve the inputs
-    ret = solve_equation(args.input)
+    ret = solve_equation(args.input, args.num_results)
     # Sort on score
     ret_list = sorted(ret, key=score_tuple, reverse=True)
     # Print the output
