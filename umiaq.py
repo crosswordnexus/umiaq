@@ -194,10 +194,30 @@ class Word:
             partitions.append(thesePartitions)
         return partitions
 
+def is_deterministic_pattern(patt):
+    """    
+    A deterministic pattern is one that is all letters
+    i.e. no regex matches like "." or "*"
+    """
+    return re.match(r'[A-Za-z]+$', patt) is not None
+
+def pattern_to_word(patt, d):
+    """
+    Given a pattern and a dictionary associating variables to strings, 
+    return the word created.
+    Note that the pattern must be a "deterministic" one.
+    
+    Returns: str
+    """
+    assert is_deterministic_pattern(patt)
+    ret = patt
+    for k, v in d.items():
+        ret = ret.replace(k, v.lower())
+    ret = ret.upper()
+    return ret
 
 # For testing purposes
 class MyArgs:
-    
     def __repr__(self):
         return self.input
     
@@ -228,12 +248,17 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
     other_dict = dict()
     for patt in others:
         other_dict[patt] = dict()
+    # We also maintain a dictionary of "entry" to "score"
+    entry_to_score = dict()
     with open(WORD_LIST, 'r') as fid:
         for line in fid:
             word, score = line.split(';')
+            # Normalize to all uppercase words
+            word = word.upper()
             score = int(score)
             if score < MIN_SCORE or len(word) > max_word_length:
                 continue
+            entry_to_score[word] = score
             # do the cover words
             for i, patt in enumerate(cover):
                 if regexes[patt].match(word) is not None:
@@ -244,17 +269,32 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 # We keep a dictionary for easy lookup
                 if regexes[patt].match(word) is not None:
                     w = Word(word, score, patt)
-                    all_partitions = w.all_partitions()
-                    for p in all_partitions:
-                        this_key = []
-                        for char in re.findall(r'[A-Z]', patt):
-                            this_key.append(p[char])
-                        this_key = tuple(this_key)
-                        # add to the appropriate dictionary
+                    # determine if this is a "deterministic" pattern
+                    is_det = is_deterministic_pattern(patt)
+                    if not is_det:
+                        all_partitions = w.all_partitions()
+                        for p in all_partitions:
+                            this_key = []
+                            for char in re.findall(r'[A-Z]', patt):
+                                this_key.append(p[char])
+                            this_key = tuple(this_key)
+                            # add to the appropriate dictionary
+                            try:
+                                other_dict[patt][this_key].add(w)
+                            except:
+                                other_dict[patt][this_key] = set([w])
+                    else:
+                        # for deterministic patterns we just store the word itself
                         try:
-                            other_dict[patt][this_key].add(w)
+                            other_dict[patt].add(word)
                         except:
-                            other_dict[patt][this_key] = set([w])
+                            other_dict[patt] = set([word])
+                    #END if/else is_deterministic
+                #END if regex match
+            #END for i in others
+        #END for line in fid
+    #END with open
+    
     t2 = time.time()
     logging.debug(f'Initial pass through word list: {(t2-t1):.3f} seconds')
                             
@@ -283,14 +323,25 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 this_dict = dict()
                 break
             for other in others:
-                other_vars = re.findall(r'[A-Z]', other)
-                # We need to create the key for lookup
-                this_tuple = tuple([combined_dict[_] for _ in other_vars])
-                try:
-                    this_dict[other] = other_dict[other][this_tuple]
-                except:
-                    this_dict = dict()
-                    break
+                is_det = is_deterministic_pattern(other)
+                if is_det:
+                    # If deterministic, create the word and see if it's there
+                    this_word = pattern_to_word(other, combined_dict)
+                    if this_word in other_dict[other]:
+                        w = Word(this_word, entry_to_score[this_word], other)
+                        this_dict[other] = set([w])
+                    else:
+                        this_dict = dict()
+                        break
+                else:      
+                    # We need to create the key for lookup
+                    other_vars = re.findall(r'[A-Z]', other)
+                    this_tuple = tuple([combined_dict[_] for _ in other_vars])
+                    try:
+                        this_dict[other] = other_dict[other][this_tuple]
+                    except:
+                        this_dict = dict()
+                        break
             #END for other
             # If we've got a match, add it to the return set
             if this_dict:
