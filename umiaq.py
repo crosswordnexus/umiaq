@@ -212,7 +212,7 @@ def pattern_to_word(patt, d):
     assert is_deterministic_pattern(patt)
     ret = patt
     for k, v in d.items():
-        ret = ret.replace(k, v)
+        ret = ret.replace(k, v.lower())
     ret = ret.upper()
     return ret
 
