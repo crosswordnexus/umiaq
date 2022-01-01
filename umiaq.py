@@ -323,12 +323,12 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 this_dict = dict()
                 break
             for other in others:
-                is_det = is_deterministic_pattern(patt)
+                is_det = is_deterministic_pattern(other)
                 if is_det:
                     # If deterministic, create the word and see if it's there
-                    this_word = pattern_to_word(patt, combined_dict)
+                    this_word = pattern_to_word(other, combined_dict)
                     if this_word in other_dict[other]:
-                        w = Word(this_word, entry_to_score[this_word], patt)
+                        w = Word(this_word, entry_to_score[this_word], other)
                         this_dict[other] = set([w])
                     else:
                         this_dict = dict()
