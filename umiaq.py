@@ -26,6 +26,13 @@ MAX_WORD_LENGTH = 21
 # The word list itself
 WORD_LIST = 'xwordlist_sorted_trimmed.txt'
 
+# A standard big number
+BIG_NUMBER = 1e6
+
+# Greek letters are for extended variables
+GREEK_LETTERS = [ '\u03B1', '\u03B2', '\u03B3', '\u03B4', '\u03B5', '\u03B6'
+                , '\u03B7', '\u03B8', '\u03B9', '\u03BA', '\u03BB', '\u03BC']
+
 # Make partitions of a string
 # We will need to change this when it gets more advanced
 def multiSlice(s, cutpoints):
@@ -40,16 +47,17 @@ def multiSlice(s, cutpoints):
         multislices.extend(s[cutpoints[i]:cutpoints[i+1]] for i in range(k-1))
         multislices.append(s[cutpoints[k-1]:])
         return multislices
- 
+
+# This includes partitions of length 0
 def allPartitions(s, num=None):
     n = len(s)
-    cuts = list(range(1,n))
+    cuts = list(range(0,n+1))
     if num:
         num_arr = [num-1]
     else:
         num_arr = range(n)
     for k in num_arr:
-        for cutpoints in itertools.combinations(cuts,k):
+        for cutpoints in itertools.combinations_with_replacement(cuts,k):
             yield multiSlice(s,cutpoints)
             
 # Function to combine dictionaries, with conflict resolution
@@ -117,9 +125,13 @@ def split_input(i):
     """
     Split an input string along the split character
     
-    Returns: list
+    Returns: list of patterns
     """
-    return i.split(';')
+    ret = []
+    for x in i.split(';'):
+        patt = Pattern(x)
+        ret.append(patt)
+    return ret
 
 def powerset(iterable):
     "list(powerset([1,2,3])) --> [(), (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3)]"
@@ -131,7 +143,7 @@ def input_variables(inputs):
     Determine all the variables in a list of inputs
     Returns: set
     """
-    input_str = ''.join(inputs)
+    input_str = ''.join([x.string for x in inputs])
     return set(re.findall('[A-Z]', input_str))
 
 def get_set_cover(inputs):
@@ -150,6 +162,20 @@ def get_set_cover(inputs):
         myvars = input_variables(myset)
         if myvars == allvars:
             return set(myset), set(inputs).difference(myset)
+        
+
+# store a pattern and all the things that go with it
+class Pattern:
+    def __init__(self, patt_str, lengths={}, values={}):
+        self.string = patt_str
+        self.lengths = lengths
+        self.values = values
+        
+        for s in self.string:
+            self.lengths[s] = self.lengths.get(s, [1, BIG_NUMBER])
+            
+    def __repr__(self):
+        return f"Pattern(string: {self.string}, lengths: {self.lengths}, values: {self.values})"
     
 # store a word and all its partitions 
 class Word:
@@ -170,13 +196,13 @@ class Word:
         
     def matches_pattern(self):
         # check that the word matches the pattern
-        r, _ = input_to_regex(self.pattern, True)
+        r, _ = input_to_regex(self.pattern.string, True)
         return re.match(r, self.word) is not None
     
     def all_partitions(self):
         # return all the partitions of the word that match the pattern
         # get our regex, allowing for multiple letters at a time
-        i, letter_map = input_to_regex(self.pattern, True)
+        i, letter_map = input_to_regex(self.pattern.string, True)
         # keep just the letters, in order
         letter_array = sorted(letter_map.keys(), key=letter_map.get)
         # find our matches
@@ -209,8 +235,8 @@ def pattern_to_word(patt, d):
     
     Returns: str
     """
-    assert is_deterministic_pattern(patt)
-    ret = patt
+    assert is_deterministic_pattern(patt.string)
+    ret = patt.string
     for k, v in d.items():
         ret = ret.replace(k, v.lower())
     ret = ret.upper()
@@ -239,7 +265,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
     for patt in inputs:
         if patt in cover:
             words.append([])
-        pattern, _ = input_to_regex(patt, True)
+        pattern, _ = input_to_regex(patt.string, True)
         regexes[patt] = re.compile(pattern, re.IGNORECASE)
     
     # Go through the word list and get words that match the "cover" pattern(s)
@@ -270,7 +296,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 if regexes[patt].match(word) is not None:
                     w = Word(word, score, patt)
                     # determine if this is a "deterministic" pattern
-                    is_det = is_deterministic_pattern(patt)
+                    is_det = is_deterministic_pattern(patt.string)
                     if not is_det:
                         all_partitions = w.all_partitions()
                         for p in all_partitions:
