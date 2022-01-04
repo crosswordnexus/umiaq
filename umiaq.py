@@ -26,6 +26,16 @@ MAX_WORD_LENGTH = 21
 # The word list itself
 WORD_LIST = 'xwordlist_sorted_trimmed.txt'
 
+# A standard big number
+BIG_NUMBER = 1e6
+
+# Default length endpoints
+DEFAULT_LENGTHS = [1, BIG_NUMBER]
+
+# Greek letters are for extended variables
+GREEK_LETTERS = [ '\u03B1', '\u03B2', '\u03B3', '\u03B4', '\u03B5', '\u03B6'
+                , '\u03B7', '\u03B8', '\u03B9', '\u03BA', '\u03BB', '\u03BC']
+
 # Make partitions of a string
 # We will need to change this when it gets more advanced
 def multiSlice(s, cutpoints):
@@ -40,16 +50,17 @@ def multiSlice(s, cutpoints):
         multislices.extend(s[cutpoints[i]:cutpoints[i+1]] for i in range(k-1))
         multislices.append(s[cutpoints[k-1]:])
         return multislices
- 
+
+# This includes partitions of length 0
 def allPartitions(s, num=None):
     n = len(s)
-    cuts = list(range(1,n))
+    cuts = list(range(0,n+1))
     if num:
         num_arr = [num-1]
     else:
         num_arr = range(n)
     for k in num_arr:
-        for cutpoints in itertools.combinations(cuts,k):
+        for cutpoints in itertools.combinations_with_replacement(cuts,k):
             yield multiSlice(s,cutpoints)
             
 # Function to combine dictionaries, with conflict resolution
@@ -112,44 +123,143 @@ def input_to_regex(i, combine_letters=False):
     else:
         return i, used_letters
 
-
 def split_input(i):
     """
     Split an input string along the split character
     
-    Returns: list
+    Returns: Patterns object
     """
-    return i.split(';')
+    patt_list = []
+    greek_letters = GREEK_LETTERS[::-1]
+    # TODO: break out the case where we have a length restriction
+    for x in i.split(';'):
+        values = {}; lengths = {}
+        x1 = x
+        # handle dots and stars
+        for dot_star in re.findall(r'[\.\*]+', x1):
+            greek_letter = greek_letters.pop()
+            x1 = x1.replace(dot_star, greek_letter)
+            min_length = dot_star.count('.')
+            max_length = BIG_NUMBER if '*' in dot_star else min_length
+            lengths[greek_letter] = [min_length, max_length]
+        # handle lowercase letters
+        for let in re.findall(r'[a-z]+', x1):
+            greek_letter = greek_letters.pop()
+            x1 = x1.replace(let, greek_letter)
+            lengths[greek_letter] = [len(let), len(let)]
+            values[greek_letter] = let
+        patt = Pattern(x1, values, lengths)
+        patt_list.append(patt)
+    return Patterns(patt_list)
 
 def powerset(iterable):
     "list(powerset([1,2,3])) --> [(), (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3)]"
     s = list(iterable)
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
-
-def input_variables(inputs):
-    """
-    Determine all the variables in a list of inputs
-    Returns: set
-    """
-    input_str = ''.join(inputs)
-    return set(re.findall('[A-Z]', input_str))
-
-def get_set_cover(inputs):
-    """
-    Find a minimal covering for our variables
-    We just do this brute-force for now as there shouldn't be many
+        
+class Patterns:
+    def __init__(self, pattern_list):
+        self.list = pattern_list
     
-    Returns: cover, others (lists)
-    """
-    # Figure out all the variables in the inputs
+    def __repr__(self):
+        return f"patterns: {self.list}"
     
-    ps = powerset(inputs)
-    allvars = input_variables(inputs)
-    # Since the powerset is ordered by size we can just break when we find a match
-    for myset in ps:
-        myvars = input_variables(myset)
-        if myvars == allvars:
-            return set(myset), set(inputs).difference(myset)
+    def all_variables(self):
+        # Get all variables in the patterns
+        return set().union(*[set(p.string) for p in self.list])
+    
+    def set_cover(self):
+        # Find a covering set for our variables
+        # TODO: this could be optimized
+        av = self.all_variables()
+        for myset in powerset(self.list):
+            myvars = set().union(*[set(p.string) for p in myset])
+            if myvars == av:
+                return set(myset), set(self.list).difference(myset)
+
+# store a pattern and all the things that go with it
+class Pattern:
+    def __init__(self, patt_str, values={}, lengths={}):
+        self.string = patt_str
+        self.values = values
+        self.lengths = lengths
+            
+    def __repr__(self):
+        return f"Pattern(string: {self.string}, values: {self.values}, lengths: {self.lengths})"
+    
+    def from_input(self, _input):
+        self.string = _input
+    
+    def variables(self):
+        return set(self.string)
+    
+    def is_deterministic(self):
+        """    
+        A deterministic pattern is one that is all
+        either capital letters or Greek letters with values
+        """
+        for v in self.variables():
+            if re.match(r'[A-Z]', v):
+                continue
+            if self.values.get(v) is None:
+                return False
+        return True
+    
+    def to_word(self, d):
+        """
+        Given a dictionary associating variables to strings, 
+        return the word created.
+        Note that the pattern must be a "deterministic" one.
+        
+        Returns: str
+        """
+        assert self.is_deterministic()
+        ret = self.string
+        # Replace the given values
+        for k, v in d.items():
+            ret = ret.replace(k, v.lower())
+        # Replace any Greek letters with values
+        for k, v in self.values:
+            ret = ret.replace(k, v.lower())
+        ret = ret.upper()
+        return ret
+    
+    def to_regex(self):
+        # Return a regex that will match the pattern
+        ret = self.string
+        # Capital letter replacement is slightly complicated
+        # The first occurrence is replaced with a `(.+)`
+        # subsequent ones have to be replaced with appropriate backrefs
+        capital_letters = re.findall(r'[A-Z]', ret)
+        ctr = 1
+        used_letters = dict()
+        for c in capital_letters:
+            # first replace one
+            ret = ret.replace(c, '(.+)', 1)
+            # then replace the rest
+            ret = ret.replace(c, f'\\{ctr}')
+            used_letters[c] = ctr
+            ctr += 1
+        # Take the unused characters, which are the Greek letters
+        for char in [x for x in ret if x in GREEK_LETTERS]:
+            if self.values.get(char):
+                ret = ret.replace(char, self.values[char].lower())
+            elif self.lengths.get(char):
+                r = ''
+                min_l, max_l = self.lengths.get(char)
+                for _ in range(min_l):
+                    r += '.'
+                if max_l == BIG_NUMBER:
+                    r += '.*'
+                else:
+                    for _ in range(max_l - min_l):
+                        r += '.'
+                ret = ret.replace(char, r)
+            else:
+                ret = ret.replace(char, '.+')
+        ret = '^' + ret + '$'
+        return ret
+            
     
 # store a word and all its partitions 
 class Word:
@@ -161,7 +271,7 @@ class Word:
         
     # Prints object information
     def __repr__(self):
-        j = {'word': self.word, 'score': self.score, 'pattern': self.pattern}
+        j = {'word': self.word, 'score': self.score, 'pattern': self.pattern.string}
         return f'Word({json.dumps(j)})'   
   
     # Prints readable form
@@ -170,51 +280,37 @@ class Word:
         
     def matches_pattern(self):
         # check that the word matches the pattern
-        r, _ = input_to_regex(self.pattern, True)
+        r, _ = input_to_regex(self.pattern.string, True)
         return re.match(r, self.word) is not None
     
     def all_partitions(self):
         # return all the partitions of the word that match the pattern
-        # get our regex, allowing for multiple letters at a time
-        i, letter_map = input_to_regex(self.pattern, True)
-        # keep just the letters, in order
-        letter_array = sorted(letter_map.keys(), key=letter_map.get)
-        # find our matches
-        matches = re.findall(i, self.word, re.IGNORECASE)[0]
-        if type(matches) == str:
-            matches = [matches]
-        # partition if necessary
-        mylist = [allPartitions(m, len(letter_array[k])) for k, m in enumerate(matches)]
-        partitions = []
-        for p in itertools.product(*mylist):
-            thesePartitions = dict()
-            for j, p1 in enumerate(p):
-                for k, char in enumerate(letter_array[j]):
-                    thesePartitions[char] = p1[k]
-            partitions.append(thesePartitions)
-        return partitions
-
-def is_deterministic_pattern(patt):
-    """    
-    A deterministic pattern is one that is all letters
-    i.e. no regex matches like "." or "*"
-    """
-    return re.match(r'[A-Za-z]+$', patt) is not None
-
-def pattern_to_word(patt, d):
-    """
-    Given a pattern and a dictionary associating variables to strings, 
-    return the word created.
-    Note that the pattern must be a "deterministic" one.
-    
-    Returns: str
-    """
-    assert is_deterministic_pattern(patt)
-    ret = patt
-    for k, v in d.items():
-        ret = ret.replace(k, v.lower())
-    ret = ret.upper()
-    return ret
+        p = self.pattern
+        mylen = len(p.string)
+        partitions = allPartitions(self.word.lower(), mylen)
+        # only keep the partition if it matches the pattern
+        # TODO: this needs to be heavily optimized
+        good_partitions = []
+        for partition in partitions:
+            is_good_partition = True
+            thisPartDict = {}
+            for i, char in enumerate(p.string):
+                this_part = partition[i]
+                if re.match(r'[A-Z]', char):
+                    if this_part != thisPartDict.get(char, this_part):
+                        is_good_partition = False
+                        break
+                    thisPartDict[char] = this_part
+                if this_part != (p.values.get(char) or this_part):
+                    is_good_partition = False
+                    break
+                char_len = p.lengths.get(char, DEFAULT_LENGTHS)
+                if len(this_part) < char_len[0] or len(this_part) > char_len[1]:
+                    is_good_partition = False
+                    break
+            if is_good_partition:
+                good_partitions.append(thisPartDict)
+        return good_partitions
 
 # For testing purposes
 class MyArgs:
@@ -227,20 +323,20 @@ class MyArgs:
         self.num_results = NUM_RESULTS
         
 def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH):
-    # Split the input
-    inputs = split_input(_input)
+    # Split the input into some patterns
+    patterns = split_input(_input)
     # Get the variables we iterate over, and those we don't
-    cover, others = get_set_cover(inputs)
+    cover, others = patterns.set_cover()
     
     # Set up lists of candidate words
     # and our regular expressions
     words = []
     regexes = dict()
-    for patt in inputs:
+    for patt in patterns.list:
         if patt in cover:
             words.append([])
-        pattern, _ = input_to_regex(patt, True)
-        regexes[patt] = re.compile(pattern, re.IGNORECASE)
+        reg = patt.to_regex()
+        regexes[patt] = re.compile(reg, re.IGNORECASE)
     
     # Go through the word list and get words that match the "cover" pattern(s)
     # we also store all the words for "others" matching
@@ -270,7 +366,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 if regexes[patt].match(word) is not None:
                     w = Word(word, score, patt)
                     # determine if this is a "deterministic" pattern
-                    is_det = is_deterministic_pattern(patt)
+                    is_det = patt.is_deterministic()
                     if not is_det:
                         all_partitions = w.all_partitions()
                         for p in all_partitions:
@@ -299,7 +395,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
     logging.debug(f'Initial pass through word list: {(t2-t1):.3f} seconds')
                             
     # If there's only one input, there's no need to loop through everything again
-    if len(inputs) == 1:
+    if len(patterns.list) == 1:
         s = set()
         for w in words[0]:
             s.add((w,))
@@ -323,10 +419,10 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 this_dict = dict()
                 break
             for other in others:
-                is_det = is_deterministic_pattern(other)
+                is_det = other.is_deterministic()
                 if is_det:
                     # If deterministic, create the word and see if it's there
-                    this_word = pattern_to_word(other, combined_dict)
+                    this_word = other.to_word(combined_dict)
                     if this_word in other_dict[other]:
                         w = Word(this_word, entry_to_score[this_word], other)
                         this_dict[other] = set([w])
@@ -345,7 +441,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             #END for other
             # If we've got a match, add it to the return set
             if this_dict:
-                entries = [this_dict[_] for _ in inputs]
+                entries = [this_dict[_] for _ in patterns.list]
                 for entries1 in itertools.product(*entries):
                     ret.add(tuple(entries1))
                     if len(ret) >= num_results:
