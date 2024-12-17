@@ -36,6 +36,8 @@ DEFAULT_LENGTHS = [1, BIG_NUMBER]
 GREEK_LETTERS = [ '\u03B1', '\u03B2', '\u03B3', '\u03B4', '\u03B5', '\u03B6'
                 , '\u03B7', '\u03B8', '\u03B9', '\u03BA', '\u03BB', '\u03BC']
 
+GREEK_LETTER_STRING = ''.join(GREEK_LETTERS)
+
 # Make partitions of a string
 # We will need to change this when it gets more advanced
 def multiSlice(s, cutpoints):
@@ -79,18 +81,31 @@ def combine_dicts(*dlist):
             else:
                 ret[k] = d[k]
     return ret
+
+def deduplicate_in_order(arr):
+    """Helper function to de-dupe a list"""
+    seen = set()
+    result = []
+    for item in arr:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
             
-def input_to_regex(i, combine_letters=False):
+def input_to_regex(i, combine_letters=False, check=True):
     """
     Create a regular expression pattern from an input string
     This regex will just tell us if a word is a candidate for the pattern
     """
-    # For now we allow uppercase, lowercase, periods and asterisks
-    if re.match(r'[^A-Za-z\*\.]', i):
-        logging.error(f"Input string {i} has bad characters")
-        return None
+    # Allow only certain characters
+    if check:
+        if re.match(r'[^A-Za-z\*\.\#\@]', i):
+            logging.error(f"Input string {i} has bad characters")
+            return None
+    
     # Replace asterisks with ".*"
     i = i.replace('*', '.*')
+    
     # Capital letter replacement is slightly complicated
     # The first occurrence is replaced with a `(.+)`
     # subsequent ones have to be replaced with appropriate backrefs
@@ -102,7 +117,7 @@ def input_to_regex(i, combine_letters=False):
         capital_letters = [k for k,v in capital_counter.items() if v > 1]
     ctr = 1
     used_letters = dict()
-    for c in capital_letters:
+    for c in deduplicate_in_order(capital_letters):
         # first replace one
         i = i.replace(c, '(.+)', 1)
         # then replace the rest
@@ -117,6 +132,12 @@ def input_to_regex(i, combine_letters=False):
             i = i.replace(c, f'({dots}+)')
             used_letters[c] = ctr
             ctr += 1
+            
+    # Replace @ with vowels, # with consonants
+    # I'm going to count "y" as both
+    i = i.replace('@', '[AEIOUY]')
+    i = i.replace('#', '[B-DF-HJ-NP-TV-Z]')
+    
     i = '^' + i + '$'
     if not combine_letters:
         return i
@@ -131,7 +152,7 @@ def split_input(i):
     """
     patt_list = []
     greek_letters = GREEK_LETTERS[::-1]
-    # TODO: break out the case where we have a length restriction
+    # TODO: break out the case where we have equals signs
     for x in i.split(';'):
         values = {}; lengths = {}
         x1 = x
@@ -166,14 +187,19 @@ class Patterns:
     
     def all_variables(self):
         # Get all variables in the patterns
-        return set().union(*[set(p.string) for p in self.list])
+        ret = set()
+        for p in self.list:
+            s = set(_ for _ in p.string if _ not in GREEK_LETTERS)
+            ret = ret | s
+        return ret
     
     def set_cover(self):
         # Find a covering set for our variables
         # TODO: this could be optimized
         av = self.all_variables()
         for myset in powerset(self.list):
-            myvars = set().union(*[set(p.string) for p in myset])
+            patterns_tmp = Patterns(list(myset))
+            myvars = patterns_tmp.all_variables()
             if myvars == av:
                 return set(myset), set(self.list).difference(myset)
 
@@ -219,7 +245,7 @@ class Pattern:
         for k, v in d.items():
             ret = ret.replace(k, v.lower())
         # Replace any Greek letters with values
-        for k, v in self.values:
+        for k, v in self.values.items():
             ret = ret.replace(k, v.lower())
         ret = ret.upper()
         return ret
@@ -227,20 +253,8 @@ class Pattern:
     def to_regex(self):
         # Return a regex that will match the pattern
         ret = self.string
-        # Capital letter replacement is slightly complicated
-        # The first occurrence is replaced with a `(.+)`
-        # subsequent ones have to be replaced with appropriate backrefs
-        capital_letters = re.findall(r'[A-Z]', ret)
-        ctr = 1
-        used_letters = dict()
-        for c in capital_letters:
-            # first replace one
-            ret = ret.replace(c, '(.+)', 1)
-            # then replace the rest
-            ret = ret.replace(c, f'\\{ctr}')
-            used_letters[c] = ctr
-            ctr += 1
-        # Take the unused characters, which are the Greek letters
+        ret = input_to_regex(ret, check=False)
+        # Now fix the Greek letters
         for char in [x for x in ret if x in GREEK_LETTERS]:
             if self.values.get(char):
                 ret = ret.replace(char, self.values[char].lower())
@@ -257,9 +271,7 @@ class Pattern:
                 ret = ret.replace(char, r)
             else:
                 ret = ret.replace(char, '.+')
-        ret = '^' + ret + '$'
         return ret
-            
     
 # store a word and all its partitions 
 class Word:
@@ -417,7 +429,6 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             # If there's a conflict we move on to the next
             if not combined_dict:
                 this_dict = dict()
-                break
             for other in others:
                 is_det = other.is_deterministic()
                 if is_det:
@@ -506,5 +517,3 @@ def main():
 #%%
 if __name__ ==  '__main__':
     sys.exit(main())
-            
-        
