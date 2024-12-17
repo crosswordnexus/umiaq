@@ -36,8 +36,6 @@ DEFAULT_LENGTHS = [1, BIG_NUMBER]
 GREEK_LETTERS = [ '\u03B1', '\u03B2', '\u03B3', '\u03B4', '\u03B5', '\u03B6'
                 , '\u03B7', '\u03B8', '\u03B9', '\u03BA', '\u03BB', '\u03BC']
 
-GREEK_LETTER_STRING = ''.join(GREEK_LETTERS)
-
 # Make partitions of a string
 # We will need to change this when it gets more advanced
 def multiSlice(s, cutpoints):
@@ -64,13 +62,13 @@ def allPartitions(s, num=None):
     for k in num_arr:
         for cutpoints in itertools.combinations_with_replacement(cuts,k):
             yield multiSlice(s,cutpoints)
-            
+
 # Function to combine dictionaries, with conflict resolution
 def combine_dicts(*dlist):
     """
     Combine a tuple of dictionaries into one.
     If there is a conflict in keys, return an empty dictionary
-    
+
     Returns: dict
     """
     ret = dict()
@@ -91,69 +89,31 @@ def deduplicate_in_order(arr):
             seen.add(item)
             result.append(item)
     return result
-            
-def input_to_regex(i, combine_letters=False, check=True):
-    """
-    Create a regular expression pattern from an input string
-    This regex will just tell us if a word is a candidate for the pattern
-    """
-    # Allow only certain characters
-    if check:
-        if re.match(r'[^A-Za-z\*\.\#\@]', i):
-            logging.error(f"Input string {i} has bad characters")
-            return None
-    
-    # Replace asterisks with ".*"
-    i = i.replace('*', '.*')
-    
-    # Capital letter replacement is slightly complicated
-    # The first occurrence is replaced with a `(.+)`
-    # subsequent ones have to be replaced with appropriate backrefs
-    capital_letters = re.findall(r'[A-Z]', i)
-    # if we're combining letters we only do this
-    # for letters that appear multiple times
-    if combine_letters:
-        capital_counter = Counter(capital_letters)
-        capital_letters = [k for k,v in capital_counter.items() if v > 1]
-    ctr = 1
-    used_letters = dict()
-    for c in deduplicate_in_order(capital_letters):
-        # first replace one
-        i = i.replace(c, '(.+)', 1)
-        # then replace the rest
-        i = i.replace(c, f'\\{ctr}')
-        used_letters[c] = ctr
-        ctr += 1
-    # if we're combining letters, take the rest in groups
-    if combine_letters:
-        other_letters = re.findall(r'[A-Z]+', i)
-        for c in other_letters:
-            dots = '.' * len(c)
-            i = i.replace(c, f'({dots}+)')
-            used_letters[c] = ctr
-            ctr += 1
-            
-    # Replace @ with vowels, # with consonants
-    # I'm going to count "y" as both
-    i = i.replace('@', '[AEIOUY]')
-    i = i.replace('#', '[B-DF-HJ-NP-TV-Z]')
-    
-    i = '^' + i + '$'
-    if not combine_letters:
-        return i
-    else:
-        return i, used_letters
 
 def split_input(i):
     """
     Split an input string along the split character
-    
+
     Returns: Patterns object
     """
     patt_list = []
     greek_letters = GREEK_LETTERS[::-1]
-    # TODO: break out the case where we have equals signs
-    for x in i.split(';'):
+
+    inputs = i.split(';')
+
+    # Split out inputs with equals signs and those without
+    i1 = [_ for _ in inputs if '=' in _]
+    i2 = [_ for _ in inputs if '=' not in _]
+
+    # deal with '=' queries first
+    # for now we just accept length queries
+    all_lengths = {}
+    for x in i1:
+        len_match = re.match(r'^\|([A-Z])\|=(\d+)$', x)
+        if len_match is not None:
+            all_lengths[len_match.groups()[0]] = int(len_match.groups()[1])
+
+    for x in i2:
         values = {}; lengths = {}
         x1 = x
         # handle dots and stars
@@ -169,6 +129,12 @@ def split_input(i):
             x1 = x1.replace(let, greek_letter)
             lengths[greek_letter] = [len(let), len(let)]
             values[greek_letter] = let
+        
+        # handle "global" lengths
+        for k, v in all_lengths.items():
+            if k in x:
+                lengths[k] = [all_lengths[k], all_lengths[k]]
+        
         patt = Pattern(x1, values, lengths)
         patt_list.append(patt)
     return Patterns(patt_list)
@@ -177,14 +143,14 @@ def powerset(iterable):
     "list(powerset([1,2,3])) --> [(), (1,), (2,), (3,), (1,2), (1,3), (2,3), (1,2,3)]"
     s = list(iterable)
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
-        
+
 class Patterns:
     def __init__(self, pattern_list):
         self.list = pattern_list
-    
+
     def __repr__(self):
         return f"patterns: {self.list}"
-    
+
     def all_variables(self):
         # Get all variables in the patterns
         ret = set()
@@ -192,7 +158,7 @@ class Patterns:
             s = set(_ for _ in p.string if _ not in GREEK_LETTERS)
             ret = ret | s
         return ret
-    
+
     def set_cover(self):
         # Find a covering set for our variables
         # TODO: this could be optimized
@@ -209,18 +175,18 @@ class Pattern:
         self.string = patt_str
         self.values = values
         self.lengths = lengths
-            
+
     def __repr__(self):
         return f"Pattern(string: {self.string}, values: {self.values}, lengths: {self.lengths})"
-    
+
     def from_input(self, _input):
         self.string = _input
-    
+
     def variables(self):
         return set(self.string)
-    
+
     def is_deterministic(self):
-        """    
+        """
         A deterministic pattern is one that is all
         either capital letters or Greek letters with values
         """
@@ -230,13 +196,13 @@ class Pattern:
             if self.values.get(v) is None:
                 return False
         return True
-    
+
     def to_word(self, d):
         """
-        Given a dictionary associating variables to strings, 
+        Given a dictionary associating variables to strings,
         return the word created.
         Note that the pattern must be a "deterministic" one.
-        
+
         Returns: str
         """
         assert self.is_deterministic()
@@ -249,12 +215,57 @@ class Pattern:
             ret = ret.replace(k, v.lower())
         ret = ret.upper()
         return ret
-    
+
     def to_regex(self):
         # Return a regex that will match the pattern
-        ret = self.string
-        ret = input_to_regex(ret, check=False)
+        i = self.string
+        lengths = self.lengths
+    
+        # Allow only certain characters (not for now)
+        #if re.match(r'[^A-Za-z\*\.\#\@]', i):
+        #    logging.error(f"Input string {i} has bad characters")
+        #    return None
+
+        # Replace asterisks with ".*"
+        i = i.replace('*', '.*')
+
+        # Capital letter replacement is slightly complicated
+        # The first occurrence is replaced with a `(.+)` or a length string
+        # subsequent ones have to be replaced with appropriate backrefs
+        capital_letters = re.findall(r'[A-Z]', i)
+        
+        ctr = 1
+        used_letters = dict()
+        for c in deduplicate_in_order(capital_letters):
+            # get the pattern, which depends on length
+            c_patt = '(.+)'
+            if lengths.get(c):
+                periods = '.' * lengths.get(c)[0]
+                c_patt = f'({periods})'
+            # first replace one
+            i = i.replace(c, c_patt, 1)
+            # then replace the rest
+            i = i.replace(c, f'\\{ctr}')
+            used_letters[c] = ctr
+            ctr += 1
+            
+        # take the rest in groups
+        other_letters = re.findall(r'[A-Z]+', i)
+        for c in other_letters:
+            dots = '.' * len(c)
+            i = i.replace(c, f'({dots}+)')
+            used_letters[c] = ctr
+            ctr += 1
+
+        # Replace @ with vowels, # with consonants
+        # I'm going to count "y" as both
+        i = i.replace('@', '[AEIOUY]')
+        i = i.replace('#', '[B-DF-HJ-NP-TV-Z]')
+
+        i = '^' + i + '$'
+        
         # Now fix the Greek letters
+        ret = i
         for char in [x for x in ret if x in GREEK_LETTERS]:
             if self.values.get(char):
                 ret = ret.replace(char, self.values[char].lower())
@@ -272,29 +283,29 @@ class Pattern:
             else:
                 ret = ret.replace(char, '.+')
         return ret
-    
-# store a word and all its partitions 
+
+# store a word and all its partitions
 class Word:
     def __init__(self, word, score, pattern):
         self.word = word
         self.pattern = pattern
         self.score = score
         #self.partitions = self.all_partitions()
-        
+
     # Prints object information
     def __repr__(self):
         j = {'word': self.word, 'score': self.score, 'pattern': self.pattern.string}
-        return f'Word({json.dumps(j)})'   
-  
+        return f'Word({json.dumps(j)})'
+
     # Prints readable form
     def __str__(self):
         return self.word
-        
+
     def matches_pattern(self):
         # check that the word matches the pattern
-        r, _ = input_to_regex(self.pattern.string, True)
+        r = self.pattern.to_regex()
         return re.match(r, self.word) is not None
-    
+
     def all_partitions(self):
         # return all the partitions of the word that match the pattern
         p = self.pattern
@@ -328,18 +339,18 @@ class Word:
 class MyArgs:
     def __repr__(self):
         return self.input
-    
+
     def __init__(self, _input):
         self.input = _input
         self.debug = False
         self.num_results = NUM_RESULTS
-        
+
 def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH):
     # Split the input into some patterns
     patterns = split_input(_input)
     # Get the variables we iterate over, and those we don't
     cover, others = patterns.set_cover()
-    
+
     # Set up lists of candidate words
     # and our regular expressions
     words = []
@@ -349,7 +360,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             words.append([])
         reg = patt.to_regex()
         regexes[patt] = re.compile(reg, re.IGNORECASE)
-    
+
     # Go through the word list and get words that match the "cover" pattern(s)
     # we also store all the words for "others" matching
     t1 = time.time()
@@ -402,10 +413,10 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             #END for i in others
         #END for line in fid
     #END with open
-    
+
     t2 = time.time()
     logging.debug(f'Initial pass through word list: {(t2-t1):.3f} seconds')
-                            
+
     # If there's only one input, there's no need to loop through everything again
     if len(patterns.list) == 1:
         s = set()
@@ -413,7 +424,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             s.add((w,))
         ret = list(s)[:num_results]
         return ret
-            
+
     # Now loop through all the necessary lists
     # and see if the "others" match something
     t3 = time.time()
@@ -440,7 +451,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                     else:
                         this_dict = dict()
                         break
-                else:      
+                else:
                     # We need to create the key for lookup
                     other_vars = re.findall(r'[A-Z]', other)
                     this_tuple = tuple([combined_dict[_] for _ in other_vars])
@@ -471,7 +482,7 @@ def score_tuple(word_tuple):
     For now this is just the sum of the individual scores
     """
     return sum(w.score for w in word_tuple)
-    
+
 def main():
     # Parse the inputs
     parser = argparse.ArgumentParser()
@@ -483,21 +494,21 @@ def main():
                         , type=int
                         , help="The maximum number of results to output"
                         , default=NUM_RESULTS)
-    
+
     # If we can't parse the inputs, assume we're testing
     try:
         args = parser.parse_args()
         args.input
     except:
         args = MyArgs('AB;BA')
-    
+
     # Set up logging
     loglevel = 'INFO'
     if args.debug:
         loglevel = 'DEBUG'
     logging.basicConfig(format='%(levelname)s [%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
 
-    
+
     # Set up a timer
     t1 = time.time()
     # Solve the inputs
