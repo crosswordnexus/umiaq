@@ -163,6 +163,10 @@ class Patterns:
         # Find a covering set for our variables
         # TODO: this could be optimized
         av = self.all_variables()
+        
+        # case where there are no variables
+        if not av:
+            return set(self.list), set()
         for myset in powerset(self.list):
             patterns_tmp = Patterns(list(myset))
             myvars = patterns_tmp.all_variables()
