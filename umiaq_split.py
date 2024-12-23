@@ -2,6 +2,24 @@ import re
 from typing import List, Dict, Tuple
 
 NAMED_GROUP_PATTERN = r"\(\?P<\w+>.*?\)"
+NAMED_GROUP_COMPILED = re.compile(r"\(\?P<(\w+)>")
+BACKREF_COMPILED = re.compile(r"\\(\d+)")
+
+CAPITAL_GREEK_LETTERS = [None, "Γ", "Δ", "Λ", "Ξ", "Π", "Σ", "Φ", "Ψ", "Ω", "Θ"]
+
+def extract_backrefs(regex):
+    """
+    Extract backreferences from a regex pattern
+    return a dictionary mapping backreference indices to their referenced group names
+    """
+    named_groups = {i+1: name for i, name in enumerate(NAMED_GROUP_COMPILED.findall(regex))}
+    backrefs = {}
+    for m in BACKREF_COMPILED.finditer(regex):
+        backref_index = int(m.group(1))
+        if backref_index in named_groups:
+            backrefs[backref_index] = named_groups[backref_index]
+    return backrefs
+        
 
 def split_named_regex(pattern: str):
     """
@@ -30,12 +48,23 @@ def split_named_regex(pattern: str):
     return result
 
 def parse_pattern(pattern):
+    """
+    Parse a regex into "group" and "fixed" components
+    Return an array of "group" or "fixed" components
+    and optionally a "backref" component
+    """
+    # Pull out backrefs, if any
+    backrefs = extract_backrefs(pattern)
+    # split the regex
     split_regex = split_named_regex(pattern)
     arr = []
     named = ''
     for patt in split_regex:
         if re.fullmatch(NAMED_GROUP_PATTERN, patt):
             named += patt[4]
+        elif BACKREF_COMPILED.fullmatch(patt):
+            letter = CAPITAL_GREEK_LETTERS[int(BACKREF_COMPILED.fullmatch(patt).group(1))]
+            named += letter
         else:
             if named:
                 arr.append(('group', named))
@@ -44,8 +73,10 @@ def parse_pattern(pattern):
     
     if named:
         arr.append(('group', named))
-            
-    return arr
+        
+    backrefs_greek = {CAPITAL_GREEK_LETTERS[k]: v for k, v in backrefs.items()}
+
+    return arr, backrefs_greek
 
 def find_fixed_positions(word: str, fixed_components: List[str]) -> List[List[Tuple[int, int]]]:
     """
@@ -67,7 +98,7 @@ def find_fixed_positions(word: str, fixed_components: List[str]) -> List[List[Tu
         positions.append(matches)
     return positions
 
-def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], lengths: dict = {}) -> List[Dict[str, str]]:
+def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], lengths: dict = {}, backrefs: dict = {}) -> List[Dict[str, str]]:
     """
     Partition a word into substrings matching a parsed regex pattern with mixed group and fixed components,
     ensuring fixed components fully match before proceeding to the next group.
@@ -162,8 +193,17 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
                         d = dict((group_name[i], p[i]) for i in range(num_partitions))
                         d.update(r)
                         final_results.append(d)
+                        
+    # We need to do a final final check for backreferences
+    if not backrefs:
+        return final_results
+    actual_final_results = []
+    for k, v in backrefs.items():
+        for part in final_results:
+            if part.get(k) == part.get(v):
+                actual_final_results.append(part)
 
-    return final_results
+    return actual_final_results
 
 def split_word_on_pattern(word, pattern):
     regex = pattern.regex
@@ -173,8 +213,8 @@ def split_word_on_pattern(word, pattern):
     # if there are no named components, return something simple
     if not re.search(NAMED_GROUP_PATTERN, regex):
         return [{"word": word}]
-    parsed_components = parse_pattern(regex)
-    result = find_regex_partitions_fixed(word, parsed_components, lengths=lengths)
+    parsed_components, backrefs = parse_pattern(regex)
+    result = find_regex_partitions_fixed(word, parsed_components, lengths=lengths, backrefs=backrefs)
     return result
 
 def generate_partitions(string: str, num_partitions: int) -> List[List[str]]:
@@ -207,8 +247,6 @@ if __name__ == '__main__':
     # Example usage
     word = "queueing".lower()
     pattern = r"(?P<A>.+)[aeiou]{3}(?P<C>.+)"
-    # Assume parse_pattern has already been run and returned the following:
-    parsed_components = parse_pattern(pattern)
     
     result = split_word_on_pattern(word, pattern)
     for match in result:
