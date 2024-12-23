@@ -177,10 +177,6 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
         reconstructed = ''.join(partition.values())
         if reconstructed != word:
             return False
-        # Also check that the lengths line up
-        for k, v in lengths.items():
-            if len(partition[k]) != v:
-                return False
         # also check that all group letters are keys
         return group_letters.issubset(set(partition.keys()))
     
@@ -201,12 +197,22 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
                         d.update(r)
                         final_results.append(d)
                         
-    # We need to do a final final check for backreferences
+    
+    # Check that the lengths line up
+    final_results2 = final_results
+    if lengths:
+        final_results2 = []
+    for k, v in lengths.items():
+        for part in final_results:
+            if len(part[k]) == v:
+                final_results2.append(part)
+    
+    # We need to do a check for backreferences
     if not backrefs:
-        return final_results
+        return final_results2
     actual_final_results = []
     for k, v in backrefs.items():
-        for part in final_results:
+        for part in final_results2:
             if part.get(k) == part.get(v):
                 actual_final_results.append(part)
 
