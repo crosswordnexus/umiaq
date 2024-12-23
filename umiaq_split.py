@@ -3,6 +3,7 @@ from typing import List, Dict, Tuple
 
 NAMED_GROUP_PATTERN = r"\(\?P<\w+>.*?\)"
 NAMED_GROUP_COMPILED = re.compile(r"\(\?P<(\w+)>")
+BACKREF_PATTERN = r"\\\d+"
 BACKREF_COMPILED = re.compile(r"\\(\d+)")
 
 CAPITAL_GREEK_LETTERS = [None, "Γ", "Δ", "Λ", "Ξ", "Π", "Σ", "Φ", "Ψ", "Ω", "Θ"]
@@ -31,11 +32,17 @@ def split_named_regex(pattern: str):
     """
     # Regex to match named groups like (?P<name>...)
     
+    pattern_for_names = f"({NAMED_GROUP_PATTERN})|({BACKREF_PATTERN})"
+    pattern_for_split = r"(\(\?P<\w+>.*?\)|\\\d+)"
+    
     # Find all named groups
-    named_groups = re.findall(NAMED_GROUP_PATTERN, pattern)
+    named_groups = re.findall(pattern_for_names, pattern)
+    named_groups = [item for pair in named_groups for item in pair if item]
    
     # Split the pattern at the named groups, keeping the separators
-    parts = re.split(NAMED_GROUP_PATTERN, pattern)
+    result = re.split(pattern_for_split, pattern)
+    # Filter out components that explicitly match, but keep empty strings
+    parts = [part for part in result if part != None and not re.fullmatch(pattern_for_split, part)]
    
     # Interleave the split parts and the named groups
     result = []
