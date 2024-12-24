@@ -71,7 +71,7 @@ def allPartitions(s, num=None):
     for k in num_arr:
         for cutpoints in itertools.combinations_with_replacement(cuts,k):
             yield multiSlice(s,cutpoints)
-            
+
 def replace_first_and_others(original, to_replace, first_replacement, other_replacements):
     """
     Replace the first occurrence of `to_replace` in `original` with `first_replacement`
@@ -177,12 +177,12 @@ def split_input(i):
             x1 = x1.replace(let, greek_letter)
             lengths[greek_letter] = [len(let), len(let)]
             values[greek_letter] = let
-        
+
         # handle "global" lengths
         for k, v in all_lengths.items():
             if k in x:
                 lengths[k] = [all_lengths[k], all_lengths[k]]
-        
+
         patt = Pattern(x1, values, lengths)
         patt_list.append(patt)
     return Patterns(patt_list)
@@ -199,7 +199,7 @@ class Patterns:
 
     def __repr__(self):
         return f"patterns: {self.ordered_list}"
-    
+
     def __iter__(self):
         # Return an iterator for the list
         return iter(self.ordered_list)
@@ -211,7 +211,7 @@ class Patterns:
             s = set(_ for _ in p.string if _ in UPPERCASE_LETTERS)
             ret = ret | s
         return ret
-    
+
     def ordered_partitions(self):
         """
         order partitions the way we want them
@@ -219,16 +219,16 @@ class Patterns:
         after that we take the one with the largest overlap with what we've got
         """
         patt_list = self.list.copy()
-        
+
         # set up the return object
         op = []
         # Find the index of the largest set
         ix = max(range(len(patt_list)), key=lambda i: len(patt_list[i].variables()))
-        
+
         # Pop the largest set
         patt = patt_list.pop(ix)
         op.append(patt)
-        
+
         # now loop through the others
         # we also keep track of the "lookup list"
         # i.e. the variables we want to index on
@@ -242,14 +242,14 @@ class Patterns:
             patt2 = patt_list.pop(ix2)
             patt2.lookup_keys = lookup_keys
             op.append(patt2)
-            
+
         return op
 
     def set_cover(self):
         # Find a covering set for our variables
         # TODO: this could be optimized
         av = self.all_variables()
-        
+
         # case where there are no variables
         if not av:
             return set(self.list), set()
@@ -277,7 +277,7 @@ class Pattern:
 
     def variables(self):
         return set([_ for _ in self.string if _ in UPPERCASE_LETTERS])
-    
+
     def get_var_dict(self):
         """
         returns a dictionary like {"A": 0, "B": 2}
@@ -288,7 +288,7 @@ class Pattern:
         for ix, r in enumerate(umiaq_split.split_named_regex(self.regex)):
             if re.fullmatch(NAMED_GROUP_PATTERN, r):
                 lk[r[4]] = ix
-                
+
         return lk
 
     def is_deterministic(self):
@@ -326,7 +326,7 @@ class Pattern:
         # Return a regex that will match the pattern
         i = self.string
         lengths = self.lengths
-    
+
         # Allow only certain characters (not for now)
         #if re.match(r'[^A-Za-z\*\.\#\@]', i):
         #    logging.error(f"Input string {i} has bad characters")
@@ -339,7 +339,7 @@ class Pattern:
         # The first occurrence is replaced with a `(.+)` or a length string
         # subsequent ones have to be replaced with appropriate backrefs
         capital_letters = re.findall(r'[A-Z]', i)
-        
+
         ctr = 1
         used_letters = dict()
         for c in deduplicate_in_order(capital_letters):
@@ -348,12 +348,12 @@ class Pattern:
             if lengths.get(c):
                 periods = '.' * lengths.get(c)[0]
                 c_patt = f'(?P<{c}>{periods})'
-                
+
             # replace using our helper function
             i = replace_first_and_others(i, c, c_patt, f'\\{ctr}')
             used_letters[c] = ctr
             ctr += 1
-            
+
         # take the rest in groups
         other_letters = re.findall(r'[a-z]+', i)
         for c in other_letters:
@@ -368,7 +368,7 @@ class Pattern:
         i = i.replace('#', '[B-DF-HJ-NP-TV-XZ]')
 
         #i = '^' + i + '$'
-        
+
         # Now fix the Greek letters
         ret = i
         for char in [x for x in ret if x in GREEK_LETTERS]:
@@ -400,12 +400,12 @@ class Word:
     def __repr__(self):
         j = {'word': self.word, 'score': self.score, 'pattern': self.pattern.string}
         return f'Word({json.dumps(j)})'
-    
+
 
     # Prints readable form
     def __str__(self):
         return self.word
-    
+
     # Create the dictionary of variables to matches
     def get_match_dict(self):
         # If no lettered variables, return empty dict
@@ -450,10 +450,10 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
     t1 = time.time()
     # We also maintain a dictionary of "entry" to "score"
     entry_to_score = dict()
-    
+
     # Keep track of words; don't add too many
     word_counts = [0] * len(words)
-    
+
     with open(WORD_LIST, 'r') as fid:
         for line in fid:
             word, score = line.split(';')
@@ -476,11 +476,11 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                         else:
                             _key = frozenset(dict((let, part[let]) for let in patt.lookup_keys).items())
                             words[i][_key].append(part)
-                            
+
                         word_counts[i] += 1
                 if word_counts[i] >= MAX_WORD_COUNT:
                     break
-                            
+
                 #END if regexes
             #END for i in others
         #END for line in fid
@@ -499,35 +499,35 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
 
     # Recursively search our words for matches
     t3 = time.time()
-    
+
     # helper function for the recursive search
     def recursive_filter(current_list, current_index=0, selected=None, current_dict=None, results=None):
         """
         Recursively loops through lists in `words`, filtering the next list based on current selections.
-        
+
         :param words: A list of dictionaries. Each contains values to loop through.
         :param current_list: Index of the current list being processed.
         :param selected: List of selected values from previous lists.
         :param current_dict: a dictionary for filtering
         :param results: a list to store results
         """
-        
+
         if selected is None:
             selected = []
-            
+
         if current_dict is None:
             current_dict = {}
-            
+
         if results is None:
             results = []
-            
+
         if len(results) >= num_results:
             return results
-            
+
         if current_index == len(words):  # Base case: All lists processed
             results.append(selected)
             return results  # Return the current selection as a valid result
-        
+
         # Loop through the current list
         for w in current_list:
             # Filter the next list based on the current value
@@ -541,18 +541,18 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 d.update(current_dict)
                 _key = frozenset(d.items())
                 next_list = words[current_index + 1][_key]
-            
+
             # Recurse and accumulate results
             recursive_filter(next_list, current_index + 1, selected + [w], d, results)
-            
+
             # Stop recursion if the desired number of results is reached
             if len(results) >= num_results:
                 break
-        
+
         return results
-                
+
     ret = recursive_filter(words[0][None])
-    
+
     t4 = time.time()
     logging.debug(f'Final pass: {(t4-t3):.3f} seconds')
     return ret[:num_results]
@@ -584,7 +584,7 @@ def main():
         args = MyArgs('AB;BA')
 
     # Set up logging
-    loglevel = 'DEBUG'
+    loglevel = 'INFO'
     if args.debug:
         loglevel = 'DEBUG'
     logging.basicConfig(format='%(levelname)s [%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
