@@ -535,11 +535,17 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
                 next_list = current_list
                 d = current_dict
             else:
+                # keys in the upcoming index
                 lookup_keys = patterns.ordered_list[current_index + 1].lookup_keys
-                # Find these values for the current word
-                d = dict((let, w[let]) for let in lookup_keys)
+                
+                d = dict((let, w[let]) for let in patterns.ordered_list[current_index].variables())
+               
                 d.update(current_dict)
-                _key = frozenset(d.items())
+                
+                # Restrict d to just keys in the upcoming index
+                d1 = dict((k, d[k]) for k in lookup_keys)
+                
+                _key = frozenset(d1.items())
                 next_list = words[current_index + 1][_key]
 
             # Recurse and accumulate results
