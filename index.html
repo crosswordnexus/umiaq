@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Umiaq Solver</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    textarea { width: 100%; height: 150px; }
+    #results { margin-top: 1em; white-space: pre-wrap; }
+    #loading { font-style: italic; color: gray; }
+    #spinner { display: inline-block; width: 1em; height: 1em; border: 2px solid #ccc; border-top: 2px solid #333; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5em; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    #mainUI { display: none; }
+    #wordlistStatus { margin-top: 0.5em; font-style: italic; color: green; }
+    details.examples { margin-top: 2em; font-size: 1.5rem;}
+  </style>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css" />
+</head>
+<body>
+  <div id="loading"><span id="spinner"></span>Loading Pyodide and modules...</div>
+
+  <div id="mainUI">
+    <h1>Umiaq</h1>
+    <label for="input">Pattern:</label>
+    <input id="input" size=60></input>
+    <br />
+    <label for="fileInput">(Optional) Upload word list:</label>
+    <input type="file" id="fileInput">
+    <div id="wordlistStatus"></div>
+    <button class="button-primary" onclick="solve()">Search</button>
+    <div id="results"></div>
+
+    <details class="examples">
+      <summary>Examples</summary>
+      <h5>Simple pattern matching</h5>
+      <pre>
+        > l.....x
+        LANDTAX
+        LEXUSRX
+        LILJINX
+        LOCKBOX
+
+        > ..i[sz]e
+        ARISE
+        GUISE
+        LUISE
+        MAIZE
+        NOISE
+
+        > #@#@#@#@#@#@#@
+        COMEFACETOFACE
+        DELIBERATIVELY
+        MILITARYPOLICE
+        MINUTEBYMINUTE
+        NATURALABILITY
+
+        > *xj*
+        JAGUARXJ
+        FLEXJOBS
+        ORTHODOXJEW
+        FIXITFELIXJR
+    </pre>
+
+    <h5>Matching using variables</h5>
+    <pre>
+        > AA
+        GAGA
+        KOKO
+        MAMA
+        PAPA
+        YOYO
+
+        > AB;BA;|A|=1
+        APE • PEA
+        BRO • ROB
+        CAM • AMC
+        DAD • ADD
+        EAR • ARE
+
+        > AkB;AlB
+        SKY • SLY
+        BAKE • BALE
+        BIKE • BILE
+        COKE • COLE
+        MIKE • MILE
+
+        > A###B;A@@@B
+        SCHWA • SEEYA
+        HDQRS • HAYES
+        RSVPS • ROUES
+        BANDTS • BAYOUS
+        PICKLED • PIEEYED
+    </pre>
+    </details>
+
+  </div>
+
+  <script>
+    let pyodide = null;
+    let wordlistLoaded = true;
+
+    async function initPyodide() {
+      pyodide = await loadPyodide();
+
+      const files = {
+        "umiaq.py": await (await fetch("./umiaq.py")).text(),
+        "umiaq_split.py": await (await fetch("./umiaq_split.py")).text(),
+        "xwordlist_sorted_trimmed.txt": await (await fetch("./xwordlist_sorted_trimmed.txt")).text()
+      };
+
+      for (const [name, content] of Object.entries(files)) {
+        pyodide.FS.writeFile(name, content);
+      }
+
+      // Now Python can import them as real modules
+      await pyodide.runPythonAsync("import umiaq_split, umiaq");
+
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("mainUI").style.display = "block";
+    }
+
+    document.getElementById("fileInput").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        let lines = e.target.result.trim().replace(/\r/g, "").split("\n");
+        lines = lines.filter(line => line.includes(";"));
+        lines.sort((wordA, wordB) => {
+          return wordA.length - wordB.length || wordA.localeCompare(wordB);
+        });
+        const sortedText = lines.join("\n");
+        pyodide.FS.writeFile("xwordlist_sorted_trimmed.txt", sortedText);
+
+        pyodide.runPythonAsync(`import builtins; builtins.WORD_LIST = 'wordlist.txt'`);
+        wordlistLoaded = true;
+        document.getElementById("wordlistStatus").textContent = "Word list loaded.";
+      };
+      reader.readAsText(file);
+    });
+
+    async function solve() {
+      document.getElementById("results").textContent = 'Loading ...';
+      if (!pyodide) {
+        document.getElementById("results").textContent = "Pyodide not yet loaded...";
+        return;
+      }
+      const input = document.getElementById("input").value.trim();
+      if (!wordlistLoaded) {
+        document.getElementById("results").textContent = "Please upload a word list file.";
+        return;
+      }
+      pyodide.globals.set("_input", input);
+      const result = await pyodide.runPythonAsync(`\nfrom umiaq import solve_equation\nsolve_equation(_input, return_json=True)`);
+      const jsResult = JSON.parse(result);
+      let output = '';
+      jsResult.forEach(x => {
+        output += x.map(w => w.word).join(" • ");
+        output += "\n";
+      });
+      if (!output) output = 'No matches found.';
+      document.getElementById("results").textContent = output;
+    }
+
+    initPyodide();
+  </script>
+</body>
+</html>

@@ -222,6 +222,7 @@ def split_word_on_pattern(word, pattern):
     regex = pattern.regex
     # Assume if a variable has a length, it is fixed
     # TODO: do we need to change this down the road?
+    # ASF
     lengths = dict((k, v[0]) for k, v in pattern.lengths.items() if re.fullmatch(r'[A-Z]', k))
     # if there are no named components, return something simple
     if not re.search(NAMED_GROUP_PATTERN, regex):
@@ -253,14 +254,3 @@ def generate_partitions(string: str, num_partitions: int) -> List[List[str]]:
     results = []
     helper(0, [])
     return results
-
-#%%
-
-if __name__ == '__main__':
-    # Example usage
-    word = "queueing".lower()
-    pattern = r"(?P<A>.+)[aeiou]{3}(?P<C>.+)"
-    
-    result = split_word_on_pattern(word, pattern)
-    for match in result:
-        print(match)

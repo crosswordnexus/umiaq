@@ -21,7 +21,7 @@ import umiaq_split
 # The number of results to report
 NUM_RESULTS = 100
 # The minimum score in the word list
-MIN_SCORE = 80
+MIN_SCORE = 50
 # The maximum word length we are interested in
 MAX_WORD_LENGTH = 21
 # The word list itself
@@ -432,7 +432,7 @@ class MyArgs:
         self.debug = False
         self.num_results = NUM_RESULTS
 
-def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH):
+def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH, return_json=False):
     # Split the input into some patterns
     patterns = split_input(_input)
 
@@ -561,7 +561,23 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
 
     t4 = time.time()
     logging.debug(f'Final pass: {(t4-t3):.3f} seconds')
-    return ret[:num_results]
+    ret = ret[:num_results]
+    ret = strip_defaultdict(ret)
+    if return_json:
+        return json.dumps(ret)
+    else:
+        return ret
+
+def strip_defaultdict(obj):
+    """Recursively convert defaultdicts to dicts"""
+    if isinstance(obj, list):
+        return [strip_defaultdict(x) for x in obj]
+    elif isinstance(obj, dict):
+        return {k: strip_defaultdict(v) for k, v in obj.items()}
+    elif isinstance(obj, defaultdict):
+        return dict(obj)
+    else:
+        return obj
 
 def score_tuple(word_tuple):
     """
