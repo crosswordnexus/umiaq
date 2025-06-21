@@ -15,25 +15,14 @@ import time
 import sys
 from collections import defaultdict
 import umiaq_split
-#import builtins
 
-# Global variables
-
+## Global variables ##
 # The number of results to report
 NUM_RESULTS = 100
-# The minimum score in the word list
-MIN_SCORE = 50
 # The maximum word length we are interested in
 MAX_WORD_LENGTH = 21
 # The word list itself
 WORD_LIST = 'xwordlist_sorted_trimmed.txt'
-
-# class UmiaqState():
-#     wordlist = WORD_LIST
-#     min_score = MIN_SCORE
-#     word_array = None
-#
-# builtins._UMIAQ = UmiaqState()
 
 UPPERCASE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -440,7 +429,8 @@ class MyArgs:
         self.debug = False
         self.num_results = NUM_RESULTS
 
-def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH, return_json=False):
+def solve_equation(_input, num_results=NUM_RESULTS,
+                max_word_length=MAX_WORD_LENGTH, return_json=False, min_score=0):
     # Split the input into some patterns
     patterns = split_input(_input)
 
@@ -468,7 +458,7 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             # Normalize to all uppercase words
             word = word.upper()
             score = int(score)
-            if score < MIN_SCORE or len(word) > max_word_length:
+            if score < min_score or len(word) > max_word_length:
                 continue
             entry_to_score[word] = score
             # do the cover words
@@ -605,6 +595,10 @@ def main():
                         , type=int
                         , help="The maximum number of results to output"
                         , default=NUM_RESULTS)
+    parser.add_argument("-m", "--minscore"
+                        , type=int
+                        , help="The minimum score of words to consider"
+                        , default=0)
 
     # If we can't parse the inputs, assume we're testing
     try:
@@ -623,7 +617,7 @@ def main():
     # Set up a timer
     t1 = time.time()
     # Solve the inputs
-    ret = solve_equation(args.input, args.num_results)
+    ret = solve_equation(args.input, args.num_results, min_score=args.minscore)
     # Sort on score
     #ret_list = sorted(ret, key=score_tuple, reverse=True)
     ret_list = ret
