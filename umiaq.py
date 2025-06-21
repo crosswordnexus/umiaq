@@ -15,6 +15,7 @@ import time
 import sys
 from collections import defaultdict
 import umiaq_split
+#import builtins
 
 # Global variables
 
@@ -26,6 +27,13 @@ MIN_SCORE = 50
 MAX_WORD_LENGTH = 21
 # The word list itself
 WORD_LIST = 'xwordlist_sorted_trimmed.txt'
+
+# class UmiaqState():
+#     wordlist = WORD_LIST
+#     min_score = MIN_SCORE
+#     word_array = None
+#
+# builtins._UMIAQ = UmiaqState()
 
 UPPERCASE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -537,14 +545,14 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             else:
                 # keys in the upcoming index
                 lookup_keys = patterns.ordered_list[current_index + 1].lookup_keys
-                
+
                 d = dict((let, w[let]) for let in patterns.ordered_list[current_index].variables())
-               
+
                 d.update(current_dict)
-                
+
                 # Restrict d to just keys in the upcoming index
                 d1 = dict((k, d[k]) for k in lookup_keys)
-                
+
                 _key = frozenset(d1.items())
                 next_list = words[current_index + 1][_key]
 
