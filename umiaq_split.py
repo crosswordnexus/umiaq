@@ -160,12 +160,15 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
             partition[fixed_name] = word[start:end]
             current_start = end
 
-        # Assign any remaining named groups
+        # Assign any remaining named groups that actually come *after* the last fixed component
         if group_index < len(group_components):
-            for _, group_name in group_components[group_index:]:
-                if current_start < len(word):  # Ensure non-empty trailing groups
+            last_fixed_idx = fixed_components[-1][0]       # the component-index of your final fixed piece
+            for comp_idx, group_name in group_components[group_index:]:
+                # only consume it if it lives after that fixed component
+                if comp_idx > last_fixed_idx and current_start < len(word):
                     partition[group_name] = word[current_start:]
                     current_start = len(word)
+
 
         # add the word itself
         #partition["word"] = word
