@@ -16,9 +16,12 @@ import sys
 from collections import defaultdict
 import umiaq_split
 
-## Global variables ##
+# Global variables
+
 # The number of results to report
 NUM_RESULTS = 100
+# The minimum score in the word list
+MIN_SCORE = 50
 # The maximum word length we are interested in
 MAX_WORD_LENGTH = 21
 # The word list itself
@@ -429,8 +432,7 @@ class MyArgs:
         self.debug = False
         self.num_results = NUM_RESULTS
 
-def solve_equation(_input, num_results=NUM_RESULTS,
-                max_word_length=MAX_WORD_LENGTH, return_json=False, min_score=0):
+def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH, return_json=False):
     # Split the input into some patterns
     patterns = split_input(_input)
 
@@ -458,7 +460,7 @@ def solve_equation(_input, num_results=NUM_RESULTS,
             # Normalize to all uppercase words
             word = word.upper()
             score = int(score)
-            if score < min_score or len(word) > max_word_length:
+            if score < MIN_SCORE or len(word) > max_word_length:
                 continue
             entry_to_score[word] = score
             # do the cover words
@@ -476,8 +478,8 @@ def solve_equation(_input, num_results=NUM_RESULTS,
                             words[i][_key].append(part)
 
                         word_counts[i] += 1
-                if word_counts[i] >= MAX_WORD_COUNT:
-                    break
+            if word_counts[i] >= MAX_WORD_COUNT:
+                break
 
                 #END if regexes
             #END for i in others
@@ -535,14 +537,14 @@ def solve_equation(_input, num_results=NUM_RESULTS,
             else:
                 # keys in the upcoming index
                 lookup_keys = patterns.ordered_list[current_index + 1].lookup_keys
-
+                
                 d = dict((let, w[let]) for let in patterns.ordered_list[current_index].variables())
-
+               
                 d.update(current_dict)
-
+                
                 # Restrict d to just keys in the upcoming index
                 d1 = dict((k, d[k]) for k in lookup_keys)
-
+                
                 _key = frozenset(d1.items())
                 next_list = words[current_index + 1][_key]
 
@@ -595,10 +597,6 @@ def main():
                         , type=int
                         , help="The maximum number of results to output"
                         , default=NUM_RESULTS)
-    parser.add_argument("-m", "--minscore"
-                        , type=int
-                        , help="The minimum score of words to consider"
-                        , default=0)
 
     # If we can't parse the inputs, assume we're testing
     try:
@@ -617,7 +615,7 @@ def main():
     # Set up a timer
     t1 = time.time()
     # Solve the inputs
-    ret = solve_equation(args.input, args.num_results, min_score=args.minscore)
+    ret = solve_equation(args.input, args.num_results)
     # Sort on score
     #ret_list = sorted(ret, key=score_tuple, reverse=True)
     ret_list = ret
