@@ -117,6 +117,8 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
     fixed_components = [(i, c[1]) for i, c in enumerate(components) if c[0] == 'fixed']
     group_components = [(i, c[1]) for i, c in enumerate(components) if c[0] == 'group']
     
+    last_fixed_idx = max((i for i, _ in fixed_components), default=-1)
+    
     # get the "group" letters
     group_letters = frozenset([_[1] for _ in group_components])
     
@@ -162,13 +164,11 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
 
         # Assign any remaining named groups that actually come *after* the last fixed component
         if group_index < len(group_components):
-            last_fixed_idx = fixed_components[-1][0]       # the component-index of your final fixed piece
             for comp_idx, group_name in group_components[group_index:]:
                 # only consume it if it lives after that fixed component
                 if comp_idx > last_fixed_idx and current_start < len(word):
                     partition[group_name] = word[current_start:]
                     current_start = len(word)
-
 
         # add the word itself
         #partition["word"] = word
