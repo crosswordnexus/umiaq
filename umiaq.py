@@ -431,6 +431,7 @@ class MyArgs:
         self.input = _input
         self.debug = False
         self.num_results = NUM_RESULTS
+        self.minscore = 0
 
 def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH, return_json=False):
     # Split the input into some patterns
