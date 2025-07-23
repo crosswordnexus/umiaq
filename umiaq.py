@@ -161,9 +161,11 @@ def split_input(i):
         if len_match is not None:
             all_lengths[len_match.groups()[0]] = int(len_match.groups()[1])
 
+    greek_iter = iter(greek_letters)
+
     for x in i2:
-        values = {}; lengths = {}
         x1 = x
+        values = {}; lengths = {}
         # handle dots and stars
         for dot_star in re.findall(r'[\.\*]+', x1):
             greek_letter = greek_letters.pop()
@@ -171,12 +173,19 @@ def split_input(i):
             min_length = dot_star.count('.')
             max_length = BIG_NUMBER if '*' in dot_star else min_length
             lengths[greek_letter] = [min_length, max_length]
+            
         # handle lowercase letters
-        for let in re.findall(r'[a-z]+', x1):
-            greek_letter = greek_letters.pop()
-            x1 = x1.replace(let, greek_letter)
-            lengths[greek_letter] = [len(let), len(let)]
-            values[greek_letter] = let
+        greek_iter = iter(greek_letters)
+        
+        # Helper function for below
+        def repl(m):
+            word = m.group()
+            g = next(greek_iter)
+            lengths[g] = [len(word), len(word)]
+            values[g]  = word
+            return g
+        
+        x1 = re.sub(r'[a-z]+', repl, x1)
 
         # handle "global" lengths
         for k, v in all_lengths.items():
