@@ -205,10 +205,11 @@ def find_regex_partitions_fixed(word: str, components: List[Tuple[str, str]], le
     final_results2 = final_results
     if lengths:
         final_results2 = []
-    for k, v in lengths.items():
-        for part in final_results:
-            if len(part[k]) == v:
-                final_results2.append(part)
+    for part in final_results:
+        for k, v in lengths.items():
+            if len(part[k]) != v:
+                continue
+        final_results2.append(part)
     
     # We need to do a check for backreferences
     if not backrefs:
@@ -225,7 +226,6 @@ def split_word_on_pattern(word, pattern):
     regex = pattern.regex
     # Assume if a variable has a length, it is fixed
     # TODO: do we need to change this down the road?
-    # ASF
     lengths = dict((k, v[0]) for k, v in pattern.lengths.items() if re.fullmatch(r'[A-Z]', k))
     # if there are no named components, return something simple
     if not re.search(NAMED_GROUP_PATTERN, regex):
