@@ -1,12 +1,12 @@
 from lark import Lark, Transformer, v_args
+from functools import lru_cache
 
 # --- Grammar Definition ---
 # This grammar defines a pattern language where:
-# - Uppercase letters (A-Z) are variables, optionally with length constraints like A{3}
+# - Uppercase letters (A-Z) are variables
 # - Lowercase letters (a-z) are literals
 # - "." is a wildcard for any single character
 # - ~A means "reverse of the string bound to A"
-# - ~A{3} means reverse a substring of length 3 and bind it to A
 # - [abc] matches one of the listed characters
 # - "*" matches any sequence of characters (non-empty)
 # - "@" matches any vowel (including Y)
@@ -23,36 +23,33 @@ grammar = r"""
          | literal
          | dot
 
-    varref: VAR length?          -> var
-    revref: "~" VAR length?       -> reverse
-    length: "{" NUMBER "}"       -> length
-    charset: "[" /[a-z]+/ "]"    -> charset
-    star: "*"                     -> star
-    vowel: "@"                   -> vowel
-    consonant: "#"               -> consonant
-    literal: LITERAL             -> literal
-    dot: "."                     -> dot
+    varref: VAR               -> var
+    revref: "~" VAR           -> reverse
+    charset: "[" /[a-z]+/ "]" -> charset
+    star: "*"                 -> star
+    vowel: "@"               -> vowel
+    consonant: "#"           -> consonant
+    literal: LITERAL         -> literal
+    dot: "."                 -> dot
 
     VAR: /[A-Z]/
     LITERAL: /[a-z]/
-    NUMBER: /\d+/
 
     %import common.WS_INLINE
     %ignore WS_INLINE
 """
 
 # --- Transformer ---
-# Converts the parse tree into a list of tagged tuples representing pattern components
 @v_args(inline=True)
 class PatternTransformer(Transformer):
     def start(self, *parts):
         return list(parts)
 
-    def var(self, name, length=None):
-        return ('var', str(name), int(length) if length else None)
+    def var(self, name):
+        return ('var', str(name), None)
 
-    def reverse(self, name, length=None):
-        return ('rev', str(name), int(length) if length else None)
+    def reverse(self, name):
+        return ('rev', str(name), None)
 
     def literal(self, char):
         return ('lit', str(char))
@@ -72,18 +69,9 @@ class PatternTransformer(Transformer):
     def consonant(self):
         return ('cons',)
 
-    def length(self, n):
-        return n
-
-# --- Pattern Container ---
-# Wraps the list of parsed pattern parts
 class Pattern:
     def __init__(self, parts):
         self.parts = parts
-
-# --- Pattern Parser ---
-# Parses a string pattern into a Pattern object
-from functools import lru_cache
 
 @lru_cache(maxsize=256)
 def parse_pattern(text):
@@ -91,23 +79,36 @@ def parse_pattern(text):
     parts = parser.parse(text)
     return Pattern(parts)
 
-# --- Unified Pattern Matcher ---
-# Matches a word against a Pattern object
-# - If all_matches=False (default): return the first successful match (dict of variable bindings)
-# - If all_matches=True: return a list of all valid matches (each a dict of variable bindings)
-def match_pattern(word, pattern, all_matches=False):
-    results = []      # store successful matches
-    memo = set()      # memoization set to avoid redundant states
+# --- Constraint Validator ---
+def is_valid_binding(name, val, constraints):
+    c = constraints.get(name) if constraints else None
+    if not c:
+        return True
+    if 'min_length' in c and len(val) < c['min_length']:
+        return False
+    if 'max_length' in c and len(val) > c['max_length']:
+        return False
+    if 'pattern' in c:
+        from_pattern = parse_pattern(c['pattern'])
+        if not match_pattern(val.lower(), from_pattern):
+            return False
+    return True
 
-    VOWELS = set("aeiouy")
-    CONSONANTS = set("bcdfghjklmnpqrstvwxz")
+# --- Pattern Matcher ---
+def match_pattern(word, pattern, all_matches=False, var_constraints=None):
+    results = []
+    memo = set()
+    
+    word = word.upper()
+
+    VOWELS = set("AEIOUY")
+    CONSONANTS = set("BCDFGHJKLMNPQRSTVWXZ")
 
     def helper(i, pi, bindings):
         key = (i, pi, tuple(sorted(bindings.items())))
         if key in memo:
             return
 
-        # Base case: pattern is fully consumed
         if pi == len(pattern.parts):
             if i == len(word):
                 result = dict(bindings)
@@ -116,7 +117,7 @@ def match_pattern(word, pattern, all_matches=False):
                     results.append(result)
                 else:
                     results.append(result)
-                    raise StopIteration  # short-circuit if only first match is needed
+                    raise StopIteration
             return
 
         part = pattern.parts[pi]
@@ -130,11 +131,11 @@ def match_pattern(word, pattern, all_matches=False):
                 helper(i+1, pi+1, bindings)
 
         elif part[0] == 'lit':
-            if i < len(word) and word[i] == part[1]:
+            if i < len(word) and word[i] == part[1].upper():
                 helper(i+1, pi+1, bindings)
 
         elif part[0] == 'set':
-            if i < len(word) and word[i] in part[1]:
+            if i < len(word) and word[i] in set(c.upper() for c in part[1]):
                 helper(i+1, pi+1, bindings)
 
         elif part[0] == 'vowel':
@@ -146,47 +147,45 @@ def match_pattern(word, pattern, all_matches=False):
                 helper(i+1, pi+1, bindings)
 
         elif part[0] == 'star':
-            for j in range(i+1, len(word)+1):
+            for j in range(i, len(word)+1):  # include j = i for empty string match
                 helper(j, pi+1, bindings)
                 if not all_matches and results:
                     return
 
         elif part[0] == 'var':
             name = part[1]
-            fixed_len = part[2]
             if name in bindings:
                 val = bindings[name]
                 if word.startswith(val, i):
                     helper(i+len(val), pi+1, bindings)
             else:
                 maxlen = len(word) - i
-                lengths = [fixed_len] if fixed_len else range(1, maxlen+1)
-                for L in lengths:
+                for L in range(1, maxlen+1):
                     val = word[i:i+L]
-                    new_bindings = dict(bindings)
-                    new_bindings[name] = val
-                    helper(i+L, pi+1, new_bindings)
-                    if not all_matches and results:
-                        return
+                    if is_valid_binding(name, val, var_constraints):
+                        new_bindings = dict(bindings)
+                        new_bindings[name] = val
+                        helper(i+L, pi+1, new_bindings)
+                        if not all_matches and results:
+                            return
 
         elif part[0] == 'rev':
             name = part[1]
-            fixed_len = part[2]
             if name in bindings:
                 revval = bindings[name][::-1]
                 if word.startswith(revval, i):
                     helper(i+len(revval), pi+1, bindings)
             else:
                 maxlen = len(word) - i
-                lengths = [fixed_len] if fixed_len else range(1, maxlen+1)
-                for L in lengths:
+                for L in range(1, maxlen+1):
                     revval = word[i:i+L]
                     val = revval[::-1]
-                    new_bindings = dict(bindings)
-                    new_bindings[name] = val
-                    helper(i+L, pi+1, new_bindings)
-                    if not all_matches and results:
-                        return
+                    if is_valid_binding(name, val, var_constraints):
+                        new_bindings = dict(bindings)
+                        new_bindings[name] = val
+                        helper(i+L, pi+1, new_bindings)
+                        if not all_matches and results:
+                            return
 
         memo.add(key)
 
@@ -198,6 +197,8 @@ def match_pattern(word, pattern, all_matches=False):
     if all_matches:
         return results
     return results[0] if results else None
+
+
 
 
 #%%
