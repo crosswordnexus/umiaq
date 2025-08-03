@@ -6,6 +6,7 @@ from lark import Lark, Transformer, v_args
 # - Lowercase letters (a-z) are literals
 # - "." is a wildcard for any single character
 # - ~A means "reverse of the string bound to A"
+# - ~A{3} means reverse a substring of length 3 and bind it to A
 # - [abc] matches one of the listed characters
 # - "*" matches any sequence of characters (non-empty)
 # - "@" matches any vowel (including Y)
@@ -22,15 +23,15 @@ grammar = r"""
          | literal
          | dot
 
-    varref: VAR length?      -> var
-    revref: "~" VAR           -> reverse
-    length: "{" NUMBER "}"   -> length
-    charset: "[" /[a-z]+/ "]" -> charset
-    star: "*"                 -> star
-    vowel: "@"               -> vowel
-    consonant: "#"           -> consonant
-    literal: LITERAL         -> literal
-    dot: "."                 -> dot
+    varref: VAR length?          -> var
+    revref: "~" VAR length?       -> reverse
+    length: "{" NUMBER "}"       -> length
+    charset: "[" /[a-z]+/ "]"    -> charset
+    star: "*"                     -> star
+    vowel: "@"                   -> vowel
+    consonant: "#"               -> consonant
+    literal: LITERAL             -> literal
+    dot: "."                     -> dot
 
     VAR: /[A-Z]/
     LITERAL: /[a-z]/
@@ -50,8 +51,8 @@ class PatternTransformer(Transformer):
     def var(self, name, length=None):
         return ('var', str(name), int(length) if length else None)
 
-    def reverse(self, name):
-        return ('rev', str(name))
+    def reverse(self, name, length=None):
+        return ('rev', str(name), int(length) if length else None)
 
     def literal(self, char):
         return ('lit', str(char))
@@ -97,12 +98,9 @@ def parse_pattern(text):
 def match_pattern(word, pattern, all_matches=False):
     results = []      # store successful matches
     memo = set()      # memoization set to avoid redundant states
-    
-    # Make all words uppercase
-    word = word.upper()
 
-    VOWELS = set("AEIOUY")
-    CONSONANTS = set("BCDFGHJKLMNPQRSTVWXZ")
+    VOWELS = set("aeiouy")
+    CONSONANTS = set("bcdfghjklmnpqrstvwxz")
 
     def helper(i, pi, bindings):
         key = (i, pi, tuple(sorted(bindings.items())))
@@ -173,17 +171,20 @@ def match_pattern(word, pattern, all_matches=False):
 
         elif part[0] == 'rev':
             name = part[1]
+            fixed_len = part[2]
             if name in bindings:
                 revval = bindings[name][::-1]
                 if word.startswith(revval, i):
                     helper(i+len(revval), pi+1, bindings)
             else:
-                for j in range(i+1, len(word)+1):
-                    revval = word[i:j]
+                maxlen = len(word) - i
+                lengths = [fixed_len] if fixed_len else range(1, maxlen+1)
+                for L in lengths:
+                    revval = word[i:i+L]
                     val = revval[::-1]
                     new_bindings = dict(bindings)
                     new_bindings[name] = val
-                    helper(j, pi+1, new_bindings)
+                    helper(i+L, pi+1, new_bindings)
                     if not all_matches and results:
                         return
 
@@ -198,5 +199,7 @@ def match_pattern(word, pattern, all_matches=False):
         return results
     return results[0] if results else None
 
+
+#%%
 if __name__ == '__main__':
     print(match_pattern("schwa", parse_pattern("A###B"), all_matches=True))
