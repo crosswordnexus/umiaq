@@ -51,8 +51,8 @@ def get_variables(_input):
 
 class Pattern:
     """Details about a particular pattern"""
-    def __init__(self, patt_str, lengths={}):
-        self.set_string(patt_str, lengths)
+    def __init__(self, patt_str):
+        self.set_string(patt_str)
         self.lookup_keys = None
 
     def __repr__(self):
@@ -61,10 +61,8 @@ class Pattern:
     def from_input(self, _input):
         self.string = _input
         
-    def set_string(self, patt_str, lengths):
+    def set_string(self, patt_str):
         """Create the string for lark"""
-        for k, v in lengths.items():
-            patt_str = patt_str.replace(k, f"{k}{{{v}}}")
         self.string = patt_str
         
     def variables(self):
@@ -75,12 +73,13 @@ class Patterns:
     def __init__(self, _input):
         self._input = _input
         self.list = []
-        # this next bit makes the list
+        self.var_constraints = {}
+        # this next bit makes the list and constraints
         self.make_list(_input)
         self.ordered_list = self.ordered_partitions()
 
     def __repr__(self):
-        return f"patterns: {self.ordered_list}"
+        return f"patterns: {self.ordered_list}, constraints: {self.var_constraints}"
 
     def __iter__(self):
         # Return an iterator for the list
@@ -90,19 +89,37 @@ class Patterns:
         _list = _input.split(';')
         
         # deal with '=' queries first
-        # for now we just accept length queries
-        all_lengths = {}
-        for x in _list:
-            len_match = re.match(r'^\|([A-Z])\|=(\d+)$', x)
-            if len_match is not None:
-                all_lengths[len_match.groups()[0]] = int(len_match.groups()[1])
-                
-        # Now make the list of "pattern"s
-        ret = []
+        var_constraints = defaultdict(dict)
         for x in _list:
             if '=' not in x:
-                ret.append(Pattern(x, all_lengths))
-        self.list = ret
+                continue
+            # Look for just length queries
+            len_match = re.match(r'^\|([A-Z])\|=(\d+)$', x)
+            if len_match is not None:
+                this_var, _len = len_match.groups()
+                var_constraints[this_var]['min_length'] = int(_len)
+                var_constraints[this_var]['max_length'] = int(_len)
+            # Look for more complex queries
+            q_match = re.match(r'^([A-Z])=\(?([\d\-]*)\:?([^\(\)]*)\)?$', x)
+            if q_match is not None:
+                this_var, _len, _pattern = q_match.groups()
+                min_length = int(_len.split('-')[0]) if _len.split('-')[0] else None
+                max_length = int(_len.split('-')[-1]) if _len.split('-')[-1] else None
+                if min_length:
+                    var_constraints[this_var]['min_length'] = min_length
+                if max_length:
+                    var_constraints[this_var]['max_length'] = max_length
+                if _pattern:
+                    var_constraints[this_var]['pattern'] = _pattern
+                    
+        self.var_constraints = dict(var_constraints)
+                
+        # Now make the list of "pattern"s
+        this_list = []
+        for x in _list:
+            if '=' not in x:
+                this_list.append(Pattern(x))
+        self.list = this_list
 
     def all_variables(self):
         # Get all variables in the patterns
@@ -203,7 +220,11 @@ def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LEN
             # do the cover words
             for i, patt in enumerate(pattern_obj):
                 pattern_parsed = parsed_patterns[patt]
-                for part in lark_split.match_pattern(word, pattern_parsed, all_matches=True):
+                for part in lark_split.match_pattern(
+                                        word, 
+                                        pattern_parsed, 
+                                        all_matches=True, 
+                                        var_constraints=pattern_obj.var_constraints):
                     # get the key where we want to insert this
                     if not patt.lookup_keys:
                         words[i][None].append(part)
@@ -317,6 +338,20 @@ def score_tuple(word_tuple):
     For now this is just the sum of the individual scores
     """
     return sum(w.score for w in word_tuple)
+
+def test_cases():
+    """
+    Run some basic tests to confirm results
+    """
+    arr = ['l.....x', '..i[sz]e', '#@#@#@#@#@#@#@', '*xj*', 'AA', 'A~A',
+           'AB;BA;|A|=2;B=(3-:*)', 'AkB;AlB', 'A###B;A@@@B;A=(h*)']
+    
+    for _input in arr:
+        print(f"-- {_input} --")
+        res = solve_equation(_input, num_results = 5)
+        for word_tuple in res:
+            print(" • ".join([w['word'] for w in word_tuple]))
+        print()
 
 def main():
     # Parse the inputs
