@@ -39,68 +39,7 @@
 
     <div id="results"></div>
 
-    <details class="examples">
-      <summary>Examples</summary>
-      <h5>Simple pattern matching</h5>
-      <pre>
-        > l.....x
-        LANDTAX
-        LEXUSRX
-        LILJINX
-        LOCKBOX
-
-        > ..i[sz]e
-        ARISE
-        GUISE
-        LUISE
-        MAIZE
-        NOISE
-
-        > #@#@#@#@#@#@#@
-        COMEFACETOFACE
-        DELIBERATIVELY
-        MILITARYPOLICE
-        MINUTEBYMINUTE
-        NATURALABILITY
-
-        > *xj*
-        JAGUARXJ
-        FLEXJOBS
-        ORTHODOXJEW
-        FIXITFELIXJR
-    </pre>
-
-    <h5>Matching using variables</h5>
-    <pre>
-        > AA
-        GAGA
-        KOKO
-        MAMA
-        PAPA
-        YOYO
-
-        > AB;BA;|A|=1
-        APE • PEA
-        BRO • ROB
-        CAM • AMC
-        DAD • ADD
-        EAR • ARE
-
-        > AkB;AlB
-        SKY • SLY
-        BAKE • BALE
-        BIKE • BILE
-        COKE • COLE
-        MIKE • MILE
-
-        > A###B;A@@@B
-        SCHWA • SEEYA
-        HDQRS • HAYES
-        RSVPS • ROUES
-        BANDTS • BAYOUS
-        PICKLED • PIEEYED
-    </pre>
-    </details>
+    <div id="examples-container"></div>
 
   </div>
 
@@ -117,9 +56,16 @@
     async function initPyodide() {
       pyodide = await loadPyodide();
 
+      // Install lark via micropip
+      await pyodide.loadPackage("micropip");
+      await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("lark")
+      `);
+
       const files = {
         "umiaq.py": await (await fetch("./umiaq.py")).text(),
-        "umiaq_split.py": await (await fetch("./umiaq_split.py")).text(),
+        "lark_split.py": await (await fetch("./lark_split.py")).text(),
         "xwordlist_sorted_trimmed.txt": await (await fetch("./xwordlist_sorted_trimmed.txt")).text()
       };
 
@@ -128,7 +74,7 @@
       }
 
       // Now Python can import them as real modules
-      await pyodide.runPythonAsync("import umiaq_split, umiaq");
+      await pyodide.runPythonAsync("import umiaq");
 
       document.getElementById("loading").style.display = "none";
       document.getElementById("mainUI").style.display = "block";
@@ -167,5 +113,15 @@
 
   <!-- Word list processing -->
   <script src="wordlist.js" type="text/javascript"></script>
+
+  <!-- Load the examples -->
+  <script>
+    fetch("examples.html")
+      .then(response => response.text())
+      .then(html => {
+        document.getElementById("examples-container").innerHTML = html;
+      });
+  </script>
+
 </body>
 </html>
