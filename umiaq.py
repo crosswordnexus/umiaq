@@ -349,9 +349,12 @@ def test_cases():
     
     for _input in arr:
         print(f"-- {_input} --")
+        t1 = time.time()
         res = solve_equation(_input, num_results = 5)
         for word_tuple in res:
             print(" • ".join([w['word'] for w in word_tuple]))
+        t2 = time.time()
+        print(f"Total time: {t2-t1:.2f} seconds")
         print()
 
 def main():
