@@ -109,7 +109,8 @@ class Patterns:
                     var_constraints[this_var]['min_length'] = min_length
                 if max_length:
                     var_constraints[this_var]['max_length'] = max_length
-                if _pattern:
+                # Don't bother with trivial patterns
+                if _pattern and _pattern != '*':
                     var_constraints[this_var]['pattern'] = _pattern
                     
         self.var_constraints = dict(var_constraints)
