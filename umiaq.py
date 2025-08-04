@@ -99,6 +99,16 @@ class Patterns:
                 this_var, _len = len_match.groups()
                 var_constraints[this_var]['min_length'] = int(_len)
                 var_constraints[this_var]['max_length'] = int(_len)
+            # Look for "not equal" queries
+            ne_match = re.match(r'^\!=([A-Z]+)$', x)
+            if ne_match is not None:
+                _vars = set(ne_match.groups()[0])
+                # loop through the variables. they need to not match the others
+                for v in _vars:
+                    var_constraints[v]['not_equal'] = []
+                    other_vars = _vars - set(v)
+                    for ov in other_vars:
+                        var_constraints[v]['not_equal'].append(ov)
             # Look for more complex queries
             q_match = re.match(r'^([A-Z])=\(?([\d\-]*)\:?([^\(\)]*)\)?$', x)
             if q_match is not None:
@@ -345,7 +355,7 @@ def test_cases():
     Run some basic tests to confirm results
     """
     arr = ['l.....x', '..i[sz]e', '#@#@#@#@#@#@#@', '*xj*', 'AA', 'A~A',
-           'AB;BA;|A|=2;B=(3-:*)', 'AkB;AlB', 'A###B;A@@@B;A=(h*)']
+           'AB;BA;|A|=2;|B|=2;!=AB', 'AkB;AlB', 'A###B;A@@@B', 'A=(3-:a*);dA;Am']
     
     for _input in arr:
         print(f"-- {_input} --")

@@ -81,12 +81,26 @@ def parse_pattern(text):
 
 # --- Constraint Validator ---
 @lru_cache(maxsize=1024)
-def is_valid_binding(val, pattern):
+def is_valid_binding(val, frozen_constraints, frozen_bindings, name):
+    constraints = dict(frozen_constraints)
+    bindings = dict(frozen_bindings)
+
+    pattern = constraints.get('pattern')
     if pattern:
         from_pattern = parse_pattern(pattern)
         if not match_pattern(val, from_pattern):
             return False
+
+    not_equal = constraints.get('not_equal', [])
+    for other in not_equal:
+        if other in bindings and bindings[other] == val:
+            return False
+
     return True
+
+# Helper to freeze dictionaries for caching
+def freeze_dict(d):
+    return tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in d.items())) if d else ()
 
 # --- Pattern Matcher ---
 def match_pattern(word, pattern, all_matches=False, var_constraints=None):
@@ -173,19 +187,20 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
                 minlen = 1
                 maxlen = len(word) - i
                 c = var_constraints.get(name) if var_constraints else None
-                patt = None
                 if c:
                     if 'min_length' in c:
                         minlen = max(minlen, c['min_length'])
                     if 'max_length' in c:
                         maxlen = min(maxlen, c['max_length'])
-                    patt = c.get('pattern')
+                    
+                frozen_constraints = freeze_dict(c) if c else ()
+                frozen_bindings = freeze_dict(bindings)
 
                 # Try all substrings from minlen to maxlen
                 for L in range(minlen, maxlen+1):
                     val = word[i:i+L]
                     bound_val = val[::-1] if kind == 'rev' else val
-                    if is_valid_binding(bound_val, patt):
+                    if is_valid_binding(bound_val, frozen_constraints, frozen_bindings, name):
                         new_bindings = dict(bindings)
                         new_bindings[name] = bound_val
                         helper(i+L, pi+1, new_bindings)
