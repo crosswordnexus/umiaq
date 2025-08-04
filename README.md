@@ -1,6 +1,8 @@
 # umiaq
 A pattern-matching tool to run against a word list
 
+Try it out online: https://crosswordnexus.github.io/umiaq/
+
 Word list is from https://www.spreadthewordlist.com/, CC BY-NC-SA 4.0
 
 # Samples
