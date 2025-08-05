@@ -14,22 +14,19 @@ import json
 import time
 import sys
 from collections import defaultdict
-
 import lark_split
-import wordlist
 
 from functools import lru_cache
 
-### Global variables ###
+## Global variables ##
 # The number of results to report
 NUM_RESULTS = 100
-
-## Word list variables ##
-
-
-# Note: we assume that all the words in the list are good ones
-# i.e. we don't enforce a minimum score
-WORDS = wordlist.load_words()
+# The minimum score in the word list
+MIN_SCORE = 50
+# The maximum word length we are interested in
+MAX_WORD_LENGTH = 21
+# The word list itself
+WORD_LIST = 'xwordlist_sorted_trimmed.txt'
 
 UPPERCASE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -199,7 +196,7 @@ class MyArgs:
         self.num_results = NUM_RESULTS
         self.minscore = 0
 
-def solve_equation(_input, num_results=NUM_RESULTS, return_json=False):
+def solve_equation(_input, num_results=NUM_RESULTS, max_word_length=MAX_WORD_LENGTH, return_json=False):
 
     # Set up our patterns object
     pattern_obj = Patterns(_input)
@@ -213,10 +210,8 @@ def solve_equation(_input, num_results=NUM_RESULTS, return_json=False):
     # Go through the word list and get words that match the pattern(s)
     # we also store all the words for "others" matching
     t1 = time.time()
-    
     # We also maintain a dictionary of "entry" to "score"
-    # (taking this out for now)
-    #entry_to_score = dict()
+    entry_to_score = dict()
 
     # Keep track of words; don't add too many
     word_counts = [0] * len(words)
@@ -224,28 +219,36 @@ def solve_equation(_input, num_results=NUM_RESULTS, return_json=False):
     # Parse our patterns
     parsed_patterns = dict((patt, lark_split.parse_pattern(patt.string)) for patt in pattern_obj)
 
-    for word in WORDS:
-        #entry_to_score[word] = score
-        # do the cover words
-        for i, patt in enumerate(pattern_obj):
-            pattern_parsed = parsed_patterns[patt]
-            for part in lark_split.match_pattern(
-                                    word, 
-                                    pattern_parsed, 
-                                    all_matches=True, 
-                                    var_constraints=pattern_obj.var_constraints):
-                # get the key where we want to insert this
-                if not patt.lookup_keys:
-                    words[i][None].append(part)
-                else:
-                    _key = frozenset(dict((let, part[let]) for let in patt.lookup_keys).items())
-                    words[i][_key].append(part)
+    with open(WORD_LIST, 'r') as fid:
+        for line in fid:
+            word, score = line.split(';')
+            # Normalize to all uppercase words
+            word = word.upper()
+            score = int(score)
+            if score < MIN_SCORE or len(word) > max_word_length:
+                continue
+            entry_to_score[word] = score
+            # do the cover words
+            for i, patt in enumerate(pattern_obj):
+                pattern_parsed = parsed_patterns[patt]
+                for part in lark_split.match_pattern(
+                                        word, 
+                                        pattern_parsed, 
+                                        all_matches=True, 
+                                        var_constraints=pattern_obj.var_constraints):
+                    # get the key where we want to insert this
+                    if not patt.lookup_keys:
+                        words[i][None].append(part)
+                    else:
+                        _key = frozenset(dict((let, part[let]) for let in patt.lookup_keys).items())
+                        words[i][_key].append(part)
 
-                word_counts[i] += 1
-        if word_counts[i] >= MAX_WORD_COUNT:
-            break
-        #END for i in others
-    #END for word
+                    word_counts[i] += 1
+            if word_counts[i] >= MAX_WORD_COUNT:
+                break
+            #END for i in others
+        #END for line in fid
+    #END with open
 
     t2 = time.time()
     logging.debug(f'Initial pass through word list: {(t2-t1):.3f} seconds')
