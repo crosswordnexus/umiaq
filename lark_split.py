@@ -1,5 +1,6 @@
-from lark import Lark, Transformer, v_args
+from lark import Lark, Transformer
 from functools import lru_cache
+from collections import Counter
 
 # --- Grammar Definition ---
 # This grammar defines a pattern language where:
@@ -14,7 +15,8 @@ from functools import lru_cache
 grammar = r"""
     start: expr+ -> start
 
-    ?expr: varref
+    ?expr: anagram
+         | varref
          | revref
          | charset
          | star
@@ -29,8 +31,9 @@ grammar = r"""
     star: "*"                 -> star
     vowel: "@"               -> vowel
     consonant: "#"           -> consonant
-    literal: LITERAL         -> literal
-    dot: "."                 -> dot
+    literal: LITERAL+        -> literal
+    anagram: "/" LITERAL+ -> anagram
+    dot: "." -> dot
 
     VAR: /[A-Z]/
     LITERAL: /[a-z]/
@@ -40,33 +43,34 @@ grammar = r"""
 """
 
 # --- Transformer ---
-@v_args(inline=True)
 class PatternTransformer(Transformer):
-    def start(self, *parts):
-        return list(parts)
+    def anagram(self, chars):
+        return ('anagram', ''.join(str(c) for c in chars))
+    def start(self, parts):
+        return parts
 
     def var(self, name):
-        return ('var', str(name), None)
+        return ('var', name[0].value)
 
     def reverse(self, name):
-        return ('rev', str(name), None)
+        return ('rev', name[0].value)
 
-    def literal(self, char):
-        return ('lit', str(char))
+    def literal(self, chars):
+        return ('lit', ''.join(str(c) for c in chars))
 
-    def dot(self):
+    def dot(self, _=None):
         return ('dot',)
 
     def charset(self, chars):
         return ('set', set(str(chars)))
 
-    def star(self):
+    def star(self, _=None):
         return ('star',)
 
-    def vowel(self):
+    def vowel(self, _=None):
         return ('vowel',)
 
-    def consonant(self):
+    def consonant(self, _=None):
         return ('cons',)
 
 class Pattern:
@@ -120,19 +124,18 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
         # use a hashable key to memoize search
         key = (i, pi, tuple(sorted(bindings.items())))
         if key in memo:
-            return  # already tried this state
+            return
 
-        # base case: full pattern matched
         if pi == len(pattern.parts):
-            if i == len(word):  # and full word consumed
+            if i == len(word):
                 result = dict(bindings)
                 result["word"] = word
                 results.append(result)
-                if not all_matches:
-                    raise StopIteration  # stop early if only first match desired
+                if not all_matches: 
+                    raise StopIteration # stop early if only first match desired
             return
 
-        part = pattern.parts[pi]  # get current pattern part
+        part = pattern.parts[pi] # get current pattern part
 
         # fail early if we've run past the end of the word
         if i > len(word):
@@ -146,40 +149,49 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
             if i < len(word):
                 helper(i+1, pi+1, bindings)
 
-        # Match an exact literal character (case-insensitive)
+        # Match an exact literal character (or characters)
         elif kind == 'lit':
-            if i < len(word) and word[i] == part[1].upper():
-                helper(i+1, pi+1, bindings)
+            literal = part[1].upper()
+            if word[i:i+len(literal)] == literal:
+                helper(i + len(literal), pi + 1, bindings)
 
         # Match one of a specified set of characters
         elif kind == 'set':
             if i < len(word) and word[i] in set(c.upper() for c in part[1]):
                 helper(i+1, pi+1, bindings)
 
-        # Match a vowel character
+        # Match any vowel (including Y)
         elif kind == 'vowel':
             if i < len(word) and word[i] in VOWELS:
                 helper(i+1, pi+1, bindings)
 
-        # Match a consonant character
+        # Match any consonant (not Y)
         elif kind == 'cons':
             if i < len(word) and word[i] in CONSONANTS:
                 helper(i+1, pi+1, bindings)
 
         # Match zero or more characters (greedy)
         elif kind == 'star':
-            for j in range(i, len(word)+1):  # try all possible skips
+            for j in range(i, len(word)+1):
                 helper(j, pi+1, bindings)
                 if not all_matches and results:
                     return
 
-        # Match a variable (forward or reversed)
+        # Match an anagram
+        elif kind == 'anagram':
+            target = Counter(part[1].upper())
+            if i + len(target) <= len(word):
+                actual = Counter(word[i:i + len(target)])
+                if target == actual:
+                    helper(i + len(target), pi + 1, bindings)
+
+        # Match a variable or reversed variable
         elif kind in ('var', 'rev'):
             name = part[1]
             if name in bindings:
                 val = bindings[name]
                 if kind == 'rev':
-                    val = val[::-1]  # reverse existing binding if needed
+                    val = val[::-1]
                 if word.startswith(val, i):
                     helper(i+len(val), pi+1, bindings)
             else:
@@ -192,7 +204,7 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
                         minlen = max(minlen, c['min_length'])
                     if 'max_length' in c:
                         maxlen = min(maxlen, c['max_length'])
-                    
+
                 frozen_constraints = freeze_dict(c) if c else ()
                 frozen_bindings = freeze_dict(bindings)
 
@@ -207,11 +219,11 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
                         if not all_matches and results:
                             return
 
-        memo.add(key)  # mark this state as visited
+        memo.add(key) # mark this state as visited
 
     try:
-        helper(0, 0, {})  # start recursive search
+        helper(0, 0, {}) # start recursive search
     except StopIteration:
-        pass  # stop early if not collecting all matches
+        pass # stop early if not collecting all matches
 
     return results if all_matches else (results[0] if results else None)
