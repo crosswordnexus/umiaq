@@ -1,9 +1,6 @@
 from lark import Lark, Transformer
 from functools import lru_cache
 from collections import Counter
-import wordlist
-
-WORDS = frozenset(wordlist.load_words())
 
 # --- Grammar Definition ---
 # This grammar defines a pattern language where:
