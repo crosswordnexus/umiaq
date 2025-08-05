@@ -1,6 +1,7 @@
 from lark import Lark, Transformer
 from functools import lru_cache
 from collections import Counter
+import re
 
 # --- Grammar Definition ---
 # This grammar defines a pattern language where:
@@ -61,8 +62,8 @@ class PatternTransformer(Transformer):
     def dot(self, _=None):
         return ('dot',)
 
-    def charset(self, chars):
-        return ('set', set(str(chars)))
+    def charset(self, token):  # pull from list
+        return ('set', ''.join(set(token)).upper())
 
     def star(self, _=None):
         return ('star',)
@@ -75,12 +76,84 @@ class PatternTransformer(Transformer):
 
 class Pattern:
     def __init__(self, parts):
-        self.parts = parts
+        self.parts = tuple(parts)
+
+# Set up the parser
+PARSER = Lark(grammar, parser="lalr", transformer=PatternTransformer())
+
+# Freeze length contraints
+def freeze_lengths(d):
+    if d is None:
+        return None
+    arr = []
+    for k in sorted(d.keys()):
+        v = d[k]
+        _tup = (k, str(v.get('min_length', 1)), str(v.get('max_length', 100)))
+        arr.append(_tup)
+    return tuple(arr)
+
+@lru_cache(maxsize=256)
+def pattern_parts_to_regex(pattern_parts, frozenconstraints=None):
+    """
+    Convert a pattern to a regex for quick matching
+    """
+    
+    # Convert frozenconstraints to a dict
+    if frozenconstraints:
+        var_constraints = dict((k[0], k[1:]) for k in frozenconstraints)
+    else:
+        var_constraints = {}
+    
+    def _convert(node):
+        if isinstance(node, str):
+            return re.escape(node)  # fallback: treat as literal
+        tag = node[0]
+
+        if tag == 'anagram':
+            subpatterns = node[1]
+            return '.' * len(subpatterns)
+
+        elif tag in ('var', 'rev'):
+            this_var = node[1]
+            if var_constraints.get(this_var):
+                return ".{" \
+                    + var_constraints.get(this_var, ["1", "100"])[0] \
+                    + ',' \
+                    + var_constraints.get(this_var, ["1", "100"])[1] \
+                    + '}'
+            else:
+                return ".+"
+
+        elif tag == 'set':
+            charset = re.escape(node[1])
+            return f'[{charset}]'
+
+        elif tag == 'star':
+            return '.*'
+
+        elif tag == 'vowel':
+            return '[AEIOUY]'
+
+        elif tag == 'cons':
+            return '[B-DF-HJ-NP-TV-XZ]'
+
+        elif tag == 'lit':
+            return re.escape(node[1].upper())
+
+        elif tag == 'dot':
+            return '.'
+
+        else:
+            raise ValueError(f"Unknown pattern type: {tag}")
+
+    ret = ''
+    for node in pattern_parts:
+        ret += _convert(node)
+    return re.compile(ret)
 
 @lru_cache(maxsize=256)
 def parse_pattern(text):
-    parser = Lark(grammar, parser="lalr", transformer=PatternTransformer())
-    parts = parser.parse(text)
+    parts = PARSER.parse(text)
     return Pattern(parts)
 
 # --- Constraint Validator ---
@@ -108,10 +181,22 @@ def freeze_dict(d):
 
 # --- Pattern Matcher ---
 def match_pattern(word, pattern, all_matches=False, var_constraints=None):
+    """
+    Check if a word matches a pattern
+    Return one match or all matches, as appropriate
+    """
+    
+    word = word.upper()  # normalize word to uppercase
+    
+    # Do the regex check first
+    vc_freeze = freeze_lengths(var_constraints)
+    regex = pattern_parts_to_regex(pattern.parts, vc_freeze)
+    
+    if not regex.fullmatch(word):
+        return [] if all_matches else None
+    
     results = []  # stores all valid bindings
     memo = set()  # stores visited states to prevent reprocessing
-
-    word = word.upper()  # normalize word to uppercase
 
     VOWELS = set("AEIOUY")
     CONSONANTS = set("BCDFGHJKLMNPQRSTVWXZ")
@@ -131,7 +216,7 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
                 result = dict(bindings)
                 result["word"] = word
                 results.append(result)
-                if not all_matches: 
+                if not all_matches:
                     raise StopIteration # stop early if only first match desired
             return
 

@@ -378,6 +378,9 @@ def main():
                         , type=int
                         , help="The maximum number of results to output"
                         , default=NUM_RESULTS)
+    parser.add_argument("-t", "--test"
+                        , help="Run test cases"
+                        , action="store_true")
 
     # If we can't parse the inputs, assume we're testing
     try:
@@ -392,7 +395,11 @@ def main():
         loglevel = 'DEBUG'
     logging.basicConfig(format='%(levelname)s [%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=loglevel)
 
-
+    # Run test cases if we're testing
+    if args.test:
+        test_cases()
+        return 0
+    
     # Set up a timer
     t1 = time.time()
     # Solve the inputs
