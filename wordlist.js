@@ -3,16 +3,22 @@
 **/
 
 function processWordList(fileContents, minScore) {
-  // clear existing words
   let lines = fileContents.trim().replace(/\r/g, "").split("\n");
-  lines = lines.filter(line => line.includes(";"));
+
+  // Only keep lines with a semicolon and a score >= minScore
+  lines = lines.filter(line => {
+    const parts = line.split(";");
+    return parts.length === 2 && parseFloat(parts[1]) >= minScore;
+  });
+
   lines.sort((wordA, wordB) => {
     return wordA.length - wordB.length || wordA.localeCompare(wordB);
   });
+
   const sortedText = lines.join("\n");
   pyodide.FS.writeFile("xwordlist_sorted_trimmed.txt", sortedText);
-  return;
 }
+
 
 /**
 * Modal boxes (currently only for wordlists)
