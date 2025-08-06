@@ -45,10 +45,12 @@ grammar = r"""
 
 # --- Transformer ---
 class PatternTransformer(Transformer):
-    def anagram(self, chars):
-        return ('anagram', ''.join(str(c) for c in chars))
+    
     def start(self, parts):
         return parts
+    
+    def anagram(self, chars):
+        return ('anagram', ''.join(str(c) for c in chars))
 
     def var(self, name):
         return ('var', name[0].value)
@@ -97,21 +99,21 @@ def pattern_parts_to_regex(pattern_parts, frozenconstraints=None):
     """
     Convert a pattern to a regex for quick matching
     """
-    
+
     # Convert frozenconstraints to a dict
     if frozenconstraints:
         var_constraints = dict((k[0], k[1:]) for k in frozenconstraints)
     else:
         var_constraints = {}
-    
+
     def _convert(node):
         if isinstance(node, str):
             return re.escape(node)  # fallback: treat as literal
         tag = node[0]
 
         if tag == 'anagram':
-            subpatterns = node[1]
-            return '.' * len(subpatterns)
+            subpatterns = re.escape(node[1].upper())
+            return f"[{subpatterns}]" + "{" + str(len(subpatterns)) + "}"
 
         elif tag in ('var', 'rev'):
             this_var = node[1]
@@ -185,16 +187,16 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
     Check if a word matches a pattern
     Return one match or all matches, as appropriate
     """
-    
+
     word = word.upper()  # normalize word to uppercase
-    
+
     # Do the regex check first
     vc_freeze = freeze_lengths(var_constraints)
     regex = pattern_parts_to_regex(pattern.parts, vc_freeze)
-    
+
     if not regex.fullmatch(word):
         return [] if all_matches else None
-    
+
     results = []  # stores all valid bindings
     memo = set()  # stores visited states to prevent reprocessing
 
