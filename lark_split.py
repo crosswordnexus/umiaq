@@ -65,7 +65,7 @@ class PatternTransformer(Transformer):
         return ('dot',)
 
     def charset(self, token):  # pull from list
-        return ('set', ''.join(set(token)).upper())
+        return ('set', ''.join(set(token)))
 
     def star(self, _=None):
         return ('star',)
@@ -151,6 +151,7 @@ def pattern_parts_to_regex(pattern_parts, frozenconstraints=None):
     ret = ''
     for node in pattern_parts:
         ret += _convert(node)
+    #print(ret)
     return re.compile(ret)
 
 @lru_cache(maxsize=256)
@@ -266,11 +267,12 @@ def match_pattern(word, pattern, all_matches=False, var_constraints=None):
 
         # Match an anagram
         elif kind == 'anagram':
-            target = Counter(part[1].upper())
+            anagram_str = part[1].upper()
+            target = Counter(anagram_str)
             if i + len(target) <= len(word):
-                actual = Counter(word[i:i + len(target)])
+                actual = Counter(word[i:i + len(anagram_str)])
                 if target == actual:
-                    helper(i + len(target), pi + 1, bindings)
+                    helper(i + len(anagram_str), pi + 1, bindings)
 
         # Match a variable or reversed variable
         elif kind in ('var', 'rev'):
