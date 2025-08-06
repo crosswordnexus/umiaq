@@ -354,7 +354,7 @@ def test_cases():
     """
     Run some basic tests to confirm results
     """
-    arr = ['l.....x', '..i[sz]e', '#@#@#@#@#@#@#@', '*xj*', '/triangle', 'AA', 'A~A',
+    arr = ['l.....x', '..i[sz]e', '#@#@#@#@#@#@#@', '*xj*', '/sett', 'AA', 'A~A',
            'AB;BA;|A|=2;|B|=2;!=AB', 'AkB;AlB', 'A###B;A@@@B', 'A=(3-:a*);dA;Am']
     
     for _input in arr:
