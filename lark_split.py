@@ -127,7 +127,7 @@ def pattern_parts_to_regex(pattern_parts, frozenconstraints=None):
                 return ".+"
 
         elif tag == 'set':
-            charset = re.escape(node[1])
+            charset = re.escape(node[1].upper())
             return f'[{charset}]'
 
         elif tag == 'star':
